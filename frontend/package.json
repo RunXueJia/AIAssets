@@ -1,0 +1,14 @@
+{
+  "name": "hours24-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev:admin": "npm --prefix apps/admin run dev",
+    "dev:web": "npm --prefix apps/web run dev",
+    "lint:admin": "npm --prefix apps/admin run lint",
+    "lint:web": "npm --prefix apps/web run lint",
+    "stylelint:admin": "npm --prefix apps/admin run stylelint",
+    "stylelint:web": "npm --prefix apps/web run stylelint"
+  }
+}
