@@ -5,6 +5,81 @@
 技术栈：Python + FastAPI + MySQL  
 项目目录：backend  
 
+## 实时进度同步
+
+更新时间：2026-05-20 09:34
+
+- 当前状态：已完成本轮后端 MVP 落地，待接入真实 MySQL/Redis/LLM/抓取/FFmpeg 环境后做联调。
+- 已确认：`backend/` 目录为空，本轮从后端项目初始化开始搭建。
+- 已确认：按用户要求，MySQL 数据库名固定为 `AIdrivenGrowthAssetEngine`。
+- 已确认：后端接口前缀使用 `/api/v1`，响应格式遵循 `{code, message, data}`。
+- 执行计划：先完成 FastAPI 项目骨架、配置、SQLAlchemy 模型、Alembic 迁移和初始化 SQL，再补齐主链路 API、SSE、审核、监控、合成、发布包、日报和系统设置接口。
+
+更新时间：2026-05-20 10:25
+
+- 已完成 B1：FastAPI 项目骨架、环境变量、CORS、统一异常、统一响应、基础日志表、README 和依赖清单。
+- 已完成 B2：用户、角色、权限、角色权限关联、登录、退出、当前用户、JWT 兼容 Token、接口权限依赖和默认管理员初始化。
+- 已完成 B3：按 `DATABASE_SCHEMA.md` 落地 P0/P1 数据表 SQLAlchemy 模型与 Alembic 初始迁移；初始化 SQL 创建数据库 `AIdrivenGrowthAssetEngine`。
+- 已完成 B4-B10：生成任务、素材汇总、来源、选题、脚本、分镜、字幕、内容版本、任务日志和 SSE 接口；MVP 使用本地服务桩生成 5 条来源、10 个选题、脚本、6 段分镜和字幕。
+- 已完成 B11-B15：审核、话题监控、合成任务、视频资产、发布包、发布记录接口；视频合成和发布包当前生成本地占位文件，保留可替换边界。
+- 已完成 B16-B19：数据看板、每日报告、文件下载、系统设置接口。
+- 验证通过：`python -m compileall backend\app backend\alembic`。
+- 验证通过：`python -m ruff check backend\app backend\alembic`。
+- 验证通过：FastAPI TestClient 调用 `/health` 返回 `database=AIdrivenGrowthAssetEngine`。
+- 验证通过：`python -m alembic upgrade head --sql` 可离线渲染建表 SQL。
+- 编码检查：本轮新增/修改的源码、配置、SQL、Markdown 未发现 UTF-8 BOM，未发现 U+FFFD。
+- 待联调：真实 MySQL 执行 `scripts/create_database.sql` 和 `alembic upgrade head`，真实 Redis/Celery、网络抓取、OpenAI 兼容 LLM、FFmpeg 合成需接入生产配置后验证。
+
+更新时间：2026-05-20 10:40
+
+- 已补充 LLM 默认文件配置：`backend/.env.example` 新增 `LLM_MODEL_PROVIDER`、`LLM_MODEL_BASE_URL`、`LLM_MODEL_API_KEY`、`LLM_MODEL_NAME`、`LLM_REQUEST_TIMEOUT_SECONDS`。
+- 已调整启动初始化：后端启动时会把 `.env` 中非空的 LLM 配置同步到 `system_setting` 表；`.env` 优先于数据库旧值。
+- 已调整系统设置接口：`GET /api/v1/setting/get_setting` 返回 `model_base_url`、`model_name`、`model_timeout_seconds` 和脱敏后的 `model_key_masked`。
+
+更新时间：2026-05-20 10:55
+
+- 已在本机 MySQL 执行建库：`AIdrivenGrowthAssetEngine`。
+- 已执行 Alembic 迁移：当前版本 `0001_initial_schema`。
+- 已验证表数量：当前数据库包含 26 张表。
+- 已验证核心表：`generation_task`、`system_setting` 存在。
+- 已执行默认数据初始化：默认管理员 1 条，系统设置 9 条。
+- 已验证接口健康检查：`/health` 返回 `database=AIdrivenGrowthAssetEngine`。
+- 安全说明：本次未把本机 MySQL 密码写入仓库文件。
+
+更新时间：2026-05-20 11:10
+
+- 已补充 Redis/Celery 配置：`REDIS_URL`、`CELERY_BROKER_URL`、`CELERY_RESULT_BACKEND`、`ENABLE_CELERY_TASKS`。
+- 已新增 Celery 应用入口：`app.core.celery_app.celery_app`，生成任务和合成任务各有 worker task。
+- 已新增真实抓取服务：基于 `httpx + BeautifulSoup` 抓取 `FETCH_SEED_URLS`，抓取失败会落库为 `uncertain` 来源并记录错误。
+- 已新增 OpenAI 兼容 LLM 服务：读取 `system_setting` 与 `.env` 的模型配置；`LLM_ENABLE_REAL_CALLS=false` 时使用本地结构化回退。
+- 已新增 FFmpeg 服务：`FFMPEG_BIN` 指定可执行文件，`ENABLE_REAL_FFMPEG=true` 时生成竖屏 MP4；默认关闭时仍生成占位文件便于本地调试。
+- 已更新 README，补充 Redis/Celery、抓取、LLM、FFmpeg 启动和配置说明。
+
+更新时间：2026-05-20 11:25
+
+- 已修复 `FETCH_SEED_URLS` 配置解析：`.env` 支持逗号分隔 URL，也兼容 JSON 数组格式，避免 Pydantic 对列表字段预解析失败。
+- 已调整 Celery 投递时序：生成任务先提交数据库再投递到 Redis broker；重试任务在 `ENABLE_CELERY_TASKS=true` 时也走 Celery worker。
+- 已增强 Redis 探测：`ping_redis()` 在连接失败时返回 `False`，不会向调用方抛出 Redis 连接堆栈。
+- 已验证配置加载：本机 `backend\.env` 可读取 `DATABASE_URL`、Redis/Celery、抓取源、LLM、`FFMPEG_BIN=E:\APP\bin\ffmpeg.cmd`。
+- 验证通过：`backend\.venv\Scripts\python.exe -m ruff check backend\app backend\alembic`。
+- 验证通过：`backend\.venv\Scripts\python.exe -m compileall -q backend\app backend\alembic`。
+- 验证通过：FastAPI TestClient 调用 `/health` 返回 `database=AIdrivenGrowthAssetEngine`。
+- 验证通过：FFmpeg 探测返回 `ffmpeg version n7.1.4-20260513`，默认占位视频写入验证通过。
+- 当前环境状态：Redis 连接 `127.0.0.1:6379` 返回不可用，需先启动本机 Redis 后再把 `ENABLE_CELERY_TASKS=true` 并启动 Celery worker。
+- 安全检查：`backend\.env` 已被忽略；可跟踪文件未发现本机 MySQL 密码或 `sk-` 形式模型密钥。
+
+更新时间：2026-05-20 11:35
+
+- 已尝试启动本机 Redis：未发现原生 `redis-server`、`redis-cli`、Valkey、Memurai 或 KeyDB。
+- 已尝试通过 Docker Desktop 启动 Redis：Docker Desktop 程序已启动，但 `com.docker.service` 当前为 `Stopped`，当前终端无权限启动该 Windows 服务。
+- 当前阻塞：`docker info` 返回 `Access is denied`，需管理员权限启动 Docker Desktop 服务后才能拉起 Redis 容器。
+
+更新时间：2026-05-20 11:45
+
+- 已新增部署方案文档：`DEPLOYMENT_PLAN.md`，汇总后端、前端、MySQL、Redis/Celery、抓取源、LLM、FFmpeg、启动顺序和验证命令。
+- 已新增本机凭据清单：`DEPLOYMENT_LOCAL_SECRETS.md`，用于本机查看 SQL 库账号密码、默认管理员、Redis、LLM 脱敏信息和 FFmpeg 路径。
+- 已更新 `.gitignore`：忽略 `DEPLOYMENT_LOCAL_SECRETS.md`，避免误提交本机账号密码。
+
 ## 1. 后端边界
 
 后端只负责 API、SSE、数据库、任务队列、网络抓取、LLM、视频合成、文件服务和权限校验。
@@ -113,6 +188,8 @@
 - task_log：任务日志
 - daily_report：每日报告
 - system_setting：系统设置
+
+详细字段、索引和关系设计见 `DATABASE_SCHEMA.md`。
 
 验收：
 
