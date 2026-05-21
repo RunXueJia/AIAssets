@@ -81,7 +81,7 @@
 - FastAPI
 - SQLAlchemy 2
 - Alembic
-- PostgreSQL
+- MySQL
 - Redis，按需用于缓存和限流
 - Pydantic v2
 - httpx
@@ -93,7 +93,6 @@
 - Vite
 - Pinia
 - Vue Router
-- TypeScript
 - Element Plus 或 Naive UI
 - Markdown 渲染组件
 - 高德 JS API，按需用于地图展示
@@ -129,7 +128,7 @@ E:\code\hours24
 │   ├── alembic
 │   ├── tests
 │   └── pyproject.toml
-├── web
+├── frontend
 │   ├── src
 │   │   ├── api
 │   │   ├── components
@@ -138,7 +137,7 @@ E:\code\hours24
 │   │   ├── utils
 │   │   └── views
 │   ├── package.json
-│   └── vite.config.ts
+│   └── vite.config.js
 ├── docs
 │   ├── product
 │   ├── api
@@ -235,7 +234,7 @@ E:\code\hours24
 - [ ] 初始化 FastAPI 项目结构。
 - [ ] 配置 pyproject.toml。
 - [ ] 配置环境变量和 settings。
-- [ ] 接入 PostgreSQL。
+- [ ] 接入 MySQL。
 - [ ] 接入 SQLAlchemy 2 异步会话。
 - [ ] 配置 Alembic 迁移。
 - [ ] 配置统一异常处理。
@@ -372,7 +371,6 @@ E:\code\hours24
 ### 10.3 前端工程
 
 - [ ] 初始化 Vue 3 + Vite。
-- [ ] 配置 TypeScript。
 - [ ] 配置 Pinia。
 - [ ] 配置 Vue Router。
 - [ ] 配置 UI 组件库。
