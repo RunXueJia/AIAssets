@@ -36,6 +36,16 @@ export const planningApi = {
     })
   },
 
+  generateExistingRecordStream(recordId) {
+    const auth = accessToken()
+    return fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/planning/records/${recordId}/generate_stream`, {
+      method: 'POST',
+      headers: {
+        Authorization: auth ? `Bearer ${auth}` : '',
+      },
+    })
+  },
+
   resumeRecordStream(recordId, afterSequence = 0) {
     const auth = accessToken()
     return fetch(

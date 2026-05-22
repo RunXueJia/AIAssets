@@ -1,4 +1,5 @@
 import asyncio
+import re
 from datetime import datetime, timedelta, timezone
 from html import escape as escape_html
 from typing import Any
@@ -34,6 +35,7 @@ PROMPT_TEMPLATE = """你是路书匠 AI 规划引擎。
 - 天气：{weather_summary}
 - 路线：{route_summary}
 - 地图链接：{amap_route_url}
+- 导航途径点：{navigation_waypoint_summary}
 - 景点：{attractions_summary}
 - 实时信息：{realtime_summary}
 
@@ -143,7 +145,7 @@ class AiPlanningService:
             provider="amap",
         )
         route = await self._safe_context(
-            self._route_context(request, attractions=attractions),
+            self._route_context(request),
             fallback=self._empty_route_context(request),
             provider="amap",
         )
@@ -240,6 +242,7 @@ class AiPlanningService:
             weather_summary=external.weather.get("weather_summary", "暂无天气摘要"),
             route_summary=external.route.get("route_summary", "暂无路线摘要"),
             amap_route_url=external.map_export.get("amap_route_url", "暂无地图链接"),
+            navigation_waypoint_summary=self._navigation_waypoint_summary(external),
             attractions_summary=external.attractions.get("attractions_summary", "暂无景点摘要"),
             realtime_summary=external.realtime.get("realtime_info_summary", "暂无实时信息摘要"),
         )
@@ -272,33 +275,86 @@ class AiPlanningService:
     async def _route_context(
         self,
         request: GenerateStreamRequest,
-        *,
-        attractions: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        base_route = await self._calculate_route(request, waypoints=[])
+        waypoint_attractions = await self._safe_route_waypoint_attractions_context(
+            request=request,
+            route=base_route,
+        )
         waypoint_candidates = self._route_waypoint_candidates(
             request,
-            attractions=attractions,
+            waypoint_attractions=waypoint_attractions,
+            route=base_route,
         )
+        route = base_route
+        if waypoint_candidates:
+            try:
+                route = await self._calculate_route(request, waypoints=waypoint_candidates)
+            except Exception as exc:
+                route = {
+                    **base_route,
+                    "fallback_reason": self._append_fallback_reason(
+                        base_route.get("fallback_reason"),
+                        f"途径点路线计算失败：{exc}",
+                    ),
+                }
+        route["recommended_waypoint_items"] = self._items_for_locations(
+            waypoint_attractions,
+            waypoint_candidates,
+        )
+        route["recommended_waypoint_source"] = (waypoint_attractions or {}).get("source")
+        route["waypoint_search"] = self._waypoint_search_export(waypoint_attractions)
+        return route
+
+    async def _calculate_route(
+        self,
+        request: GenerateStreamRequest,
+        *,
+        waypoints: list[str],
+    ) -> dict[str, Any]:
         return await self.amap_service.calculate_route(
             AmapRouteRequest(
                 origin=request.origin,
                 destination=request.destination,
                 transport_mode=request.transport_mode,
-                waypoints=waypoint_candidates,
+                waypoints=waypoints,
             )
         )
+
+    async def _safe_route_waypoint_attractions_context(
+        self,
+        *,
+        request: GenerateStreamRequest,
+        route: dict[str, Any],
+    ) -> dict[str, Any]:
+        if request.transport_mode not in {"driving", "mixed", "cycling", "motorcycle"}:
+            return self._empty_route_waypoint_attractions_context(request)
+        try:
+            return await self._route_waypoint_attractions_context(request, route=route)
+        except Exception as exc:
+            return {
+                **self._empty_route_waypoint_attractions_context(request),
+                "provider": "amap",
+                "fallback_reason": str(exc),
+                "source_updated_at": self._iso_now(),
+            }
 
     def _route_waypoint_candidates(
         self,
         request: GenerateStreamRequest,
         *,
-        attractions: dict[str, Any] | None,
+        waypoint_attractions: dict[str, Any] | None,
+        route: dict[str, Any] | None = None,
     ) -> list[str]:
-        if request.transport_mode not in {"driving", "mixed"}:
+        if request.transport_mode not in {"driving", "mixed", "cycling", "motorcycle"}:
             return []
-        if not attractions:
+        if not waypoint_attractions:
             return []
-        return self._locations_from_attractions(attractions, request=request)
+        return self._locations_from_attractions(
+            waypoint_attractions,
+            request=request,
+            route=route,
+        )
 
     async def _map_export_context(
         self,
@@ -306,10 +362,21 @@ class AiPlanningService:
         record_id: int,
         request: GenerateStreamRequest,
         route: dict[str, Any],
+        waypoint_attractions: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        waypoint_attractions = waypoint_attractions or self._route_waypoint_search_from_route(route)
         origin_location = self._location_from_route(route, "origin")
         destination_location = self._location_from_route(route, "destination")
-        waypoint_locations = self._locations_from_route_waypoints(route)
+        route_waypoints = self._locations_from_route_waypoints(route)
+        navigation_waypoints = self._navigation_waypoints(
+            route=route,
+            waypoint_attractions=waypoint_attractions,
+            request=request,
+        )
+        navigation_waypoint_items = self._items_for_locations(
+            waypoint_attractions,
+            navigation_waypoints,
+        )
         try:
             link = await self.amap_service.create_route_link(
                 AmapRouteLinkRequest(
@@ -318,7 +385,10 @@ class AiPlanningService:
                     destination_name=request.destination,
                     destination=destination_location or request.destination,
                     transport_mode=request.transport_mode,
-                    waypoints=waypoint_locations,
+                    waypoints=self._link_waypoints(
+                        waypoint_items=navigation_waypoint_items,
+                        waypoint_locations=navigation_waypoints,
+                    ),
                 )
             )
         except Exception as exc:
@@ -335,7 +405,7 @@ class AiPlanningService:
                     export_type="static",
                     origin=origin_location,
                     destination=destination_location,
-                    waypoints=waypoint_locations,
+                    waypoints=navigation_waypoints or route_waypoints,
                 )
             )
         except Exception as exc:
@@ -355,9 +425,13 @@ class AiPlanningService:
             "amap_route_url": self._preferred_amap_route_url(
                 link=link,
                 export=export,
-                waypoint_locations=waypoint_locations,
+                waypoint_locations=navigation_waypoints,
             ),
             "route_snapshot_id": route.get("route_snapshot_id"),
+            "navigation_waypoints": navigation_waypoints,
+            "navigation_waypoint_items": navigation_waypoint_items,
+            "route_waypoints": route_waypoints,
+            "waypoint_search": self._waypoint_search_export(waypoint_attractions),
             "source_updated_at": self._iso_now(),
         }
         if fallback_reasons:
@@ -379,11 +453,39 @@ class AiPlanningService:
     ) -> str | None:
         link_url = link.get("amap_route_url")
         export_url = export.get("amap_route_url")
-        if waypoint_locations and isinstance(export_url, str):
-            return export_url
         if isinstance(link_url, str):
             return link_url
+        if waypoint_locations and isinstance(export_url, str):
+            return export_url
         return export_url if isinstance(export_url, str) else None
+
+    def _navigation_waypoints(
+        self,
+        *,
+        route: dict[str, Any],
+        waypoint_attractions: dict[str, Any] | None,
+        request: GenerateStreamRequest,
+    ) -> list[str]:
+        requested = route.get("requested_waypoints")
+        if isinstance(requested, list):
+            origin_location = self._location_from_route(route, "origin")
+            destination_location = self._location_from_route(route, "destination")
+            values = [
+                item
+                for item in requested
+                if isinstance(item, str)
+                and "," in item
+                and not self._near_endpoint(item, origin_location, destination_location)
+            ]
+            if values:
+                return values
+        if waypoint_attractions:
+            return self._locations_from_attractions(
+                waypoint_attractions,
+                request=request,
+                route=route,
+            )
+        return []
 
     def _fallback_amap_route_url(
         self,
@@ -460,6 +562,416 @@ class AiPlanningService:
             "fallback_reason": data.get("fallback_reason"),
             "source_updated_at": data.get("source_updated_at") or self._iso_now(),
         }
+
+    async def _route_waypoint_attractions_context(
+        self,
+        request: GenerateStreamRequest,
+        *,
+        route: dict[str, Any],
+    ) -> dict[str, Any]:
+        queries = self._route_waypoint_queries(request)
+        results = []
+        for query in queries:
+            data = await self.amap_service.search_places(
+                keyword=query,
+                city=self._route_search_city(request),
+            )
+            results.append(
+                {
+                    "query": query,
+                    "items": data.get("items") or [],
+                    "source": "amap_poi",
+                    "provider": data.get("provider"),
+                    "mock": data.get("mock", False),
+                    "fallback_reason": data.get("fallback_reason"),
+                    "source_updated_at": data.get("source_updated_at"),
+                }
+            )
+        web_result = await self._route_web_waypoint_query_result(request=request, route=route)
+        if web_result is not None:
+            results.append(web_result)
+
+        candidates = self._route_waypoint_items(
+            request=request,
+            query_results=results,
+            route=route,
+        )
+        names = "、".join(item["name"] for item in candidates[:3])
+        summary = (
+            f"沿{request.origin}至{request.destination}方向推荐途径{names}。"
+            if names
+            else f"暂未检索到{request.origin}至{request.destination}明确沿途景点。"
+        )
+        fallback_reasons = [
+            result.get("fallback_reason")
+            for result in results
+            if result.get("fallback_reason")
+        ]
+        return {
+            "attractions_summary": summary,
+            "items": candidates,
+            "source": "route_waypoint_search",
+            "queries": queries,
+            "source_types": self._waypoint_source_types(results),
+            "provider": self._provider_for(results),
+            "mock": bool(results) and all(result.get("mock", False) for result in results),
+            "fallback_reason": "；".join(dict.fromkeys(fallback_reasons))
+            if fallback_reasons
+            else None,
+            "source_updated_at": self._latest_source_updated_at(results),
+        }
+
+    async def _route_web_waypoint_query_result(
+        self,
+        *,
+        request: GenerateStreamRequest,
+        route: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        query = self._route_web_waypoint_query(request)
+        if not query:
+            return None
+        try:
+            data = await self.realtime_service.search(
+                keyword=query,
+                category="guide",
+                limit=5,
+            )
+        except Exception as exc:
+            return {
+                "query": query,
+                "items": [],
+                "source": "web_search",
+                "provider": "realtime",
+                "mock": False,
+                "fallback_reason": f"全网途径点搜索失败：{exc}",
+                "source_updated_at": self._iso_now(),
+            }
+
+        items = await self._resolve_web_waypoint_items(
+            request=request,
+            route=route,
+            query=query,
+            web_items=[
+                item for item in data.get("items") or [] if isinstance(item, dict)
+            ],
+        )
+        return {
+            "query": query,
+            "items": items,
+            "source": "web_search",
+            "provider": data.get("provider"),
+            "mock": data.get("mock", False),
+            "fallback_reason": data.get("fallback_reason"),
+            "source_updated_at": data.get("source_updated_at") or self._iso_now(),
+        }
+
+    async def _resolve_web_waypoint_items(
+        self,
+        *,
+        request: GenerateStreamRequest,
+        route: dict[str, Any],
+        query: str,
+        web_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        origin = request.origin.strip()
+        destination = request.destination.strip()
+        origin_location = self._location_from_route(route, "origin")
+        destination_location = self._location_from_route(route, "destination")
+        resolved: list[dict[str, Any]] = []
+        seen_locations: set[str] = set()
+        city = self._route_search_city(request)
+        for candidate in self._web_waypoint_candidates(
+            request=request,
+            web_items=web_items,
+        ):
+            data = await self.amap_service.search_places(keyword=candidate["name"], city=city)
+            for poi in data.get("items") or []:
+                if not isinstance(poi, dict):
+                    continue
+                name = str(poi.get("name") or candidate["name"]).strip()
+                location = poi.get("location")
+                if not isinstance(location, str) or "," not in location:
+                    continue
+                if location in seen_locations:
+                    continue
+                if self._poi_matches_endpoint(name, origin=origin, destination=destination):
+                    continue
+                if self._near_endpoint(location, origin_location, destination_location):
+                    continue
+                if not self._is_route_waypoint_poi(poi, query=query):
+                    continue
+                seen_locations.add(location)
+                resolved.append(
+                    {
+                        "name": name or candidate["name"],
+                        "reason": candidate.get("reason")
+                        or poi.get("type")
+                        or poi.get("address")
+                        or "全网搜索推荐途径点",
+                        "location": location,
+                        "address": poi.get("address"),
+                        "type": poi.get("type") or "全网搜索途径点",
+                        "source": "web_search",
+                        "source_query": query,
+                        "source_title": candidate.get("source_title"),
+                        "source_url": candidate.get("source_url"),
+                        "source_site": candidate.get("source_site"),
+                    }
+                )
+                break
+            if len(resolved) >= 5:
+                break
+        return resolved
+
+    def _route_web_waypoint_query(self, request: GenerateStreamRequest) -> str:
+        parts = [
+            request.origin.strip(),
+            "到",
+            request.destination.strip(),
+            "沿途必经途径点 景点 公园 博物馆 观景台 顺路",
+        ]
+        if request.preferences:
+            parts.append(" ".join(request.preferences[:3]))
+        if request.avoidances:
+            parts.append("避开 " + " ".join(request.avoidances[:2]))
+        return " ".join(part for part in parts if part).strip()
+
+    def _web_waypoint_candidates(
+        self,
+        *,
+        request: GenerateStreamRequest,
+        web_items: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        seen_names: set[str] = set()
+        for item in web_items:
+            source_title = str(item.get("title") or "").strip()
+            source_url = item.get("url")
+            source_site = item.get("source")
+            names = self._structured_web_waypoint_names(item)
+            if not names:
+                names = self._waypoint_names_from_text(
+                    " ".join(
+                        str(value or "")
+                        for value in [item.get("title"), item.get("summary")]
+                    ),
+                    request=request,
+                )
+            for name in names:
+                normalized = self._clean_waypoint_name(name)
+                if not normalized or normalized in seen_names:
+                    continue
+                if self._poi_matches_endpoint(
+                    normalized,
+                    origin=request.origin.strip(),
+                    destination=request.destination.strip(),
+                ):
+                    continue
+                seen_names.add(normalized)
+                candidates.append(
+                    {
+                        "name": normalized,
+                        "reason": item.get("summary") or "全网搜索推荐途径点",
+                        "source_title": source_title,
+                        "source_url": source_url,
+                        "source_site": source_site,
+                    }
+                )
+                if len(candidates) >= 8:
+                    return candidates
+        return candidates
+
+    def _structured_web_waypoint_names(self, item: dict[str, Any]) -> list[str]:
+        raw = item.get("raw")
+        if not isinstance(raw, dict):
+            return []
+        names: list[str] = []
+        for key in ("waypoint_candidates", "waypoints", "pois", "attractions"):
+            value = raw.get(key)
+            if not isinstance(value, list):
+                continue
+            for entry in value:
+                if isinstance(entry, str):
+                    names.append(entry)
+                elif isinstance(entry, dict):
+                    names.append(str(entry.get("name") or ""))
+        return names
+
+    def _waypoint_names_from_text(
+        self,
+        text: str,
+        *,
+        request: GenerateStreamRequest,
+    ) -> list[str]:
+        if not text.strip():
+            return []
+        names: list[str] = []
+        suffix_pattern = (
+            r"[\u4e00-\u9fffA-Za-z0-9·-]{2,24}"
+            r"(?:景区|公园|博物馆|纪念馆|湿地|古镇|古村|广场|观景台|文化园|风景区)"
+        )
+        for match in re.finditer(suffix_pattern, text):
+            names.append(match.group(0))
+        for chunk in re.split(r"[：:、，,；;|/()\[\]【】\n\r]", text):
+            normalized = self._clean_waypoint_name(chunk)
+            if normalized and len(normalized) <= 20:
+                names.append(normalized)
+
+        blocked = {
+            request.origin.strip(),
+            request.destination.strip(),
+            "沿途景点",
+            "途径景点",
+            "必经景点",
+            "推荐景点",
+        }
+        route_words = ("路线", "攻略", "推荐", "沿途", "途经", "途径", "起点", "终点")
+        result = []
+        for name in names:
+            if name in blocked:
+                continue
+            if any(word in name for word in route_words):
+                continue
+            if name not in result:
+                result.append(name)
+        return result[:8]
+
+    def _clean_waypoint_name(self, value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        value = value.strip()
+        value = re.sub(r"^[\s\d.、:：-]+|[\s.。；;，,]+$", "", value)
+        return value.strip()
+
+    def _route_waypoint_queries(self, request: GenerateStreamRequest) -> list[str]:
+        origin = request.origin.strip()
+        destination = request.destination.strip()
+        preference_text = " ".join(request.preferences[:3]).strip()
+        base_queries = [
+            f"{origin} 到 {destination} 沿途景点",
+            f"{origin} {destination} 途径景点",
+            f"{origin} {destination} 景点",
+        ]
+        if preference_text:
+            base_queries.insert(1, f"{origin} 到 {destination} {preference_text} 景点")
+        return list(dict.fromkeys(query for query in base_queries if query.strip()))[:4]
+
+    def _route_search_city(self, request: GenerateStreamRequest) -> str | None:
+        destination = request.destination.strip()
+        city = self._city_token(destination)
+        return city or destination or None
+
+    def _city_token(self, value: str) -> str:
+        for token in re.split(r"[\s,/，、]+", value.strip()):
+            token = token.strip()
+            if token.endswith(("市", "县", "区", "州", "盟")) and len(token) >= 2:
+                return token
+        match = re.search(r"[\u4e00-\u9fff]{2,8}市", value)
+        return match.group(0) if match else ""
+
+    def _route_waypoint_items(
+        self,
+        *,
+        request: GenerateStreamRequest,
+        query_results: list[dict[str, Any]],
+        route: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        origin = request.origin.strip()
+        destination = request.destination.strip()
+        origin_location = self._location_from_route(route, "origin")
+        destination_location = self._location_from_route(route, "destination")
+        items: list[dict[str, Any]] = []
+        seen_locations: set[str] = set()
+        for result in query_results:
+            query = str(result.get("query") or "")
+            for raw in result.get("items") or []:
+                if not isinstance(raw, dict):
+                    continue
+                name = str(raw.get("name") or "").strip()
+                location = raw.get("location")
+                if not isinstance(location, str) or "," not in location:
+                    continue
+                if location in seen_locations:
+                    continue
+                if not self._is_route_waypoint_poi(raw, query=query):
+                    continue
+                if self._poi_matches_endpoint(name, origin=origin, destination=destination):
+                    continue
+                if self._near_endpoint(location, origin_location, destination_location):
+                    continue
+                seen_locations.add(location)
+                items.append(
+                    {
+                        "name": name or "沿途景点",
+                        "reason": raw.get("type") or raw.get("address") or "沿途景点搜索结果",
+                        "location": location,
+                        "address": raw.get("address"),
+                        "type": raw.get("type"),
+                        "source": raw.get("source") or result.get("source") or "amap_poi",
+                        "source_query": query,
+                        "source_title": raw.get("source_title"),
+                        "source_url": raw.get("source_url"),
+                        "source_site": raw.get("source_site"),
+                    }
+                )
+                if len(items) >= 5:
+                    return items
+        return items
+
+    def _waypoint_source_types(self, results: list[dict[str, Any]]) -> list[str]:
+        values = [
+            str(result.get("source"))
+            for result in results
+            if isinstance(result.get("source"), str) and result.get("source")
+        ]
+        return list(dict.fromkeys(values))
+
+    def _is_route_waypoint_poi(self, item: dict[str, Any], *, query: str) -> bool:
+        text = " ".join(str(item.get(key) or "") for key in ("name", "type", "address"))
+        excluded_tokens = (
+            "停车场",
+            "出入口",
+            "入口",
+            "出口",
+            "收费站",
+            "服务区",
+            "加油站",
+            "充电站",
+            "厕所",
+            "卫生间",
+            "售票处",
+        )
+        if any(token in text for token in excluded_tokens):
+            return False
+        scenic_tokens = (
+            "风景名胜",
+            "景点",
+            "景区",
+            "公园",
+            "博物馆",
+            "纪念馆",
+            "湿地",
+            "古镇",
+            "古村",
+            "文化",
+            "旅游",
+            "游览",
+            "沿途",
+            "途经",
+            "途径",
+        )
+        return any(token in text or token in query for token in scenic_tokens)
+
+    def _poi_matches_endpoint(
+        self,
+        name: str,
+        *,
+        origin: str,
+        destination: str,
+    ) -> bool:
+        if not name:
+            return False
+        return name in {origin, destination} or origin in name or destination in name
 
     async def _realtime_context(self, request: GenerateStreamRequest) -> dict[str, Any]:
         keyword = f"{request.destination} {request.range}".strip()
@@ -584,6 +1096,22 @@ class AiPlanningService:
             "mock": False,
         }
 
+    def _empty_route_waypoint_attractions_context(
+        self,
+        request: GenerateStreamRequest,
+    ) -> dict[str, Any]:
+        return {
+            "attractions_summary": (
+                f"未提供{request.origin}至{request.destination}沿途景点上下文。"
+            ),
+            "items": [],
+            "source": "route_waypoint_search",
+            "queries": [],
+            "source_updated_at": self._iso_now(),
+            "provider": "none",
+            "mock": False,
+        }
+
     def _empty_realtime_context(self) -> dict[str, Any]:
         return {
             "news_traffic": [],
@@ -645,6 +1173,9 @@ class AiPlanningService:
         ]
         if route_link:
             lines.append(f"高德路线：{route_link}")
+        waypoint_summary = self._navigation_waypoint_summary(context)
+        if waypoint_summary != "暂无明确导航途径点。":
+            lines.append(f"导航途径点：{waypoint_summary}")
         lines.extend(
             [
                 "",
@@ -731,14 +1262,126 @@ class AiPlanningService:
                         locations.append(waypoint)
         return locations
 
+    def _items_for_locations(
+        self,
+        attractions: dict[str, Any] | None,
+        locations: list[str],
+    ) -> list[dict[str, Any]]:
+        if not attractions or not locations:
+            return []
+        by_location = {
+            item.get("location"): item
+            for item in attractions.get("items") or []
+            if isinstance(item, dict) and isinstance(item.get("location"), str)
+        }
+        items = []
+        for location in locations:
+            item = by_location.get(location)
+            if not item:
+                continue
+            items.append(
+                {
+                    "name": item.get("name") or "途径点",
+                    "location": location,
+                    "reason": item.get("reason"),
+                    "address": item.get("address"),
+                    "type": item.get("type"),
+                    "source": item.get("source"),
+                    "source_query": item.get("source_query"),
+                    "source_title": item.get("source_title"),
+                    "source_url": item.get("source_url"),
+                    "source_site": item.get("source_site"),
+                }
+            )
+        return items
+
+    def _link_waypoints(
+        self,
+        *,
+        waypoint_items: list[dict[str, Any]],
+        waypoint_locations: list[str],
+    ) -> list[Any]:
+        if waypoint_items:
+            return [
+                {
+                    "name": str(item.get("name") or ""),
+                    "location": str(item.get("location") or ""),
+                }
+                for item in waypoint_items
+                if isinstance(item.get("location"), str)
+            ]
+        return waypoint_locations
+
+    def _waypoint_search_export(
+        self,
+        waypoint_attractions: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not waypoint_attractions:
+            return {
+                "source": "none",
+                "queries": [],
+                "items": [],
+            }
+        return {
+            "source": waypoint_attractions.get("source") or "route_waypoint_search",
+            "queries": waypoint_attractions.get("queries") or [],
+            "items": waypoint_attractions.get("items") or [],
+            "source_types": waypoint_attractions.get("source_types") or [],
+            "provider": waypoint_attractions.get("provider"),
+            "mock": waypoint_attractions.get("mock", False),
+            "fallback_reason": waypoint_attractions.get("fallback_reason"),
+            "source_updated_at": waypoint_attractions.get("source_updated_at"),
+        }
+
+    def _navigation_waypoint_summary(
+        self,
+        external_or_context: TripPlanningExternalContext | TripPlanningContext,
+    ) -> str:
+        map_export = external_or_context.map_export
+        route = external_or_context.route
+        items = map_export.get("navigation_waypoint_items") or route.get(
+            "recommended_waypoint_items"
+        ) or []
+        names = [
+            self._waypoint_display_text(item)
+            for item in items
+            if isinstance(item, dict) and item.get("name")
+        ]
+        if names:
+            return "、".join(names[:5]) + "。"
+        locations = map_export.get("navigation_waypoints") or route.get("requested_waypoints") or []
+        if locations:
+            return "、".join(str(item) for item in locations[:5]) + "。"
+        return "暂无明确导航途径点。"
+
+    def _waypoint_display_text(self, item: dict[str, Any]) -> str:
+        name = str(item.get("name") or "途径点")
+        source = item.get("source")
+        if source == "web_search":
+            return f"{name}（全网）"
+        if source == "amap_poi":
+            return f"{name}（高德）"
+        return name
+
+    def _route_waypoint_search_from_route(self, route: dict[str, Any]) -> dict[str, Any] | None:
+        value = route.get("waypoint_search")
+        return value if isinstance(value, dict) else None
+
+    def _append_fallback_reason(self, current: Any, message: str) -> str:
+        values = [value for value in [current, message] if isinstance(value, str) and value]
+        return "；".join(dict.fromkeys(values))
+
     def _locations_from_attractions(
         self,
         attractions: dict[str, Any],
         *,
         request: GenerateStreamRequest,
+        route: dict[str, Any] | None = None,
     ) -> list[str]:
         origin = request.origin.strip()
         destination = request.destination.strip()
+        origin_location = self._location_from_route(route or {}, "origin")
+        destination_location = self._location_from_route(route or {}, "destination")
         locations: list[str] = []
         seen: set[str] = set()
         for item in attractions.get("items") or []:
@@ -750,11 +1393,32 @@ class AiPlanningService:
                 continue
             if name and name in {origin, destination}:
                 continue
+            if self._near_endpoint(location, origin_location, destination_location):
+                continue
             if location in seen:
                 continue
             seen.add(location)
             locations.append(location)
         return locations[:5]
+
+    def _near_endpoint(
+        self,
+        location: str,
+        origin_location: str | None,
+        destination_location: str | None,
+    ) -> bool:
+        return any(
+            endpoint is not None and self._coordinate_distance(location, endpoint) < 0.003
+            for endpoint in [origin_location, destination_location]
+        )
+
+    def _coordinate_distance(self, left: str, right: str) -> float:
+        try:
+            left_lng, left_lat = (float(value) for value in left.split(",", 1))
+            right_lng, right_lat = (float(value) for value in right.split(",", 1))
+        except ValueError:
+            return 999
+        return ((left_lng - right_lng) ** 2 + (left_lat - right_lat) ** 2) ** 0.5
 
     def _iso_now(self) -> str:
         return datetime.now(APP_TZ).isoformat()

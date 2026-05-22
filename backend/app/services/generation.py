@@ -499,15 +499,16 @@ class GenerationService:
             yield done_event
         except Exception as exc:
             error_message = "生成过程中发生异常，已保存失败状态。"
+            error_detail = {
+                "exception": exc.__class__.__name__,
+                "message": str(exc),
+            }
             await self.record_store.mark_failed(
                 record.id,
                 stage=current_stage,
                 error_code="GENERATION_FAILED",
                 error_message=error_message,
-                error_detail={
-                    "exception": exc.__class__.__name__,
-                    "message": str(exc),
-                },
+                error_detail=error_detail,
             )
             error_event = GenerationStreamEvent(
                 event="error",
@@ -516,6 +517,7 @@ class GenerationService:
                     "stage": current_stage,
                     "error_code": "GENERATION_FAILED",
                     "message": error_message,
+                    "detail": error_detail,
                 },
             )
             await self.record_store.append_event(error_event)

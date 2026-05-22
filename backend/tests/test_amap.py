@@ -1,5 +1,5 @@
 import asyncio
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -118,6 +118,10 @@ def test_amap_web_service_client_parses_poi_and_route_payloads() -> None:
                 {
                     "distance": "12800",
                     "duration": "2400",
+                    "steps": [
+                        {"polyline": "120.21201,30.29191;120.180000,30.270000"},
+                        {"polyline": "120.180000,30.270000;120.143222,30.236064"},
+                    ],
                 }
             ]
         },
@@ -146,7 +150,13 @@ def test_amap_web_service_client_parses_poi_and_route_payloads() -> None:
     assert data["route"]["route_summary"] == "约12.8公里，预计40分钟"
     assert data["route"]["origin_location"] == "120.21201,30.29191"
     assert data["route"]["destination_location"] == "120.143222,30.236064"
-    assert data["route"]["waypoints"] == []
+    assert data["route"]["route_path_points"] == [
+        "120.21201,30.29191",
+        "120.180000,30.270000",
+        "120.143222,30.236064",
+    ]
+    assert data["route"]["waypoints"] == ["120.180000,30.270000"]
+    assert data["route"]["route_waypoints_source"] == "route_path"
 
 
 def test_amap_web_service_client_resolves_place_names_before_route_request() -> None:
@@ -256,7 +266,7 @@ def test_amap_web_service_client_builds_multi_via_route_link() -> None:
     assert schema_query["vianames"] == ["途径点1|途径点2"]
 
 
-def test_amap_web_service_client_maps_motorcycle_uri_to_ride() -> None:
+def test_amap_web_service_client_builds_multi_via_route_link_for_motorcycle() -> None:
     client = AmapWebServiceClient(api_key="test")
 
     link = asyncio.run(
@@ -271,8 +281,36 @@ def test_amap_web_service_client_maps_motorcycle_uri_to_ride() -> None:
     )
 
     query = parse_qs(urlparse(link["amap_route_url"]).query)
-    assert query["mode"] == ["ride"]
-    assert "via" not in query
+    schema = query["schema"][0]
+    schema_query = parse_qs(urlparse(schema).query)
+    assert schema.startswith("amapuri://drive/multiViaPointPlan")
+    assert schema_query["vian"] == ["1"]
+    assert schema_query["vialons"] == ["120.160000"]
+    assert schema_query["vialats"] == ["30.250000"]
+
+
+def test_amap_web_service_client_builds_multi_via_route_link_with_waypoint_names() -> None:
+    client = AmapWebServiceClient(api_key="test")
+
+    link = asyncio.run(
+        client.create_route_link(
+            origin_name="杭州东站",
+            origin="120.21201,30.29191",
+            destination_name="西湖风景名胜区",
+            destination="120.143222,30.236064",
+            transport_mode="driving",
+            waypoints=[
+                {"name": "断桥残雪", "location": "120.160000,30.250000"},
+                {"name": "苏堤春晓", "location": "120.170000,30.260000"},
+            ],
+        )
+    )
+
+    query = parse_qs(urlparse(link["amap_route_url"]).query)
+    schema_query = parse_qs(urlparse(query["schema"][0]).query)
+    assert schema_query["vialons"] == ["120.160000|120.170000"]
+    assert schema_query["vialats"] == ["30.250000|30.260000"]
+    assert unquote(schema_query["vianames"][0]) == "断桥残雪|苏堤春晓"
 
 
 def test_amap_web_service_client_builds_static_map_url_with_route_path() -> None:
@@ -340,6 +378,7 @@ def test_amap_service_normalizes_mock_client_payloads() -> None:
     assert data["search"]["items"][0]["address"] == "示例城市示例地址"
     assert data["route"]["raw"]["waypoints"] == []
     assert data["route"]["waypoints"] == []
+    assert data["route"]["route_path_points"] == []
     assert data["link"]["mock"] is True
     assert data["export"]["export_id"] == 101
 

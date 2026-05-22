@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import Date, DateTime, Index, Numeric, String, text
+from sqlalchemy import Date, DateTime, Index, Numeric, String, Text, text
 from sqlalchemy.dialects.mysql import BIGINT, INTEGER
 from sqlalchemy.dialects.mysql import JSON as MySQLJSON
 from sqlalchemy.orm import Mapped, mapped_column
@@ -49,8 +49,8 @@ class RouteMapExport(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     status: Mapped[str] = mapped_column(
         String(20), nullable=False, server_default=text("'pending'")
     )
-    amap_route_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    image_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    amap_route_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     storage_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     width: Mapped[int | None] = mapped_column(INTEGER(unsigned=True), nullable=True)
     height: Mapped[int | None] = mapped_column(INTEGER(unsigned=True), nullable=True)

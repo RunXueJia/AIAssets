@@ -4,7 +4,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from threading import Thread
 from typing import Any, Protocol
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
 
@@ -48,6 +48,7 @@ class LlmRuntimeConfig:
     timeout_s: int = 60
     max_tokens: int | None = None
     temperature: float = 0.7
+    stream_retry_count: int = 1
 
 
 class OpenAICompatibleGenerationClient:
@@ -110,19 +111,40 @@ class OpenAICompatibleGenerationClient:
             raise LlmClientError(f"LLM 调用失败: {exc}") from exc
 
     def _stream_text_sync(self, prompt: str):
-        request, endpoint = self._build_request(prompt, stream=True)
-        try:
-            with urlopen(request, timeout=self.config.timeout_s) as response:
-                self._ensure_stream_response(response, endpoint)
-                for payload in self._iter_stream_payloads(response, endpoint):
-                    self._raise_for_error_payload(payload)
-                    yield from self._extract_stream_text(payload)
-        except Exception as exc:
-            if isinstance(exc, LlmClientError):
-                raise
-            if isinstance(exc, HTTPError):
-                raise LlmClientError(self._http_error_message(exc)) from exc
-            raise LlmClientError(f"LLM 流式调用失败: {exc}") from exc
+        max_attempts = max(1, self.config.stream_retry_count + 1)
+        attempt = 0
+        yielded_any = False
+        last_error: Exception | None = None
+        while attempt < max_attempts:
+            request, endpoint = self._build_request(prompt, stream=True)
+            try:
+                with urlopen(request, timeout=self.config.timeout_s) as response:
+                    self._ensure_stream_response(response, endpoint)
+                    for payload in self._iter_stream_payloads(response, endpoint):
+                        self._raise_for_error_payload(payload)
+                        for token in self._extract_stream_text(payload):
+                            yielded_any = True
+                            yield token
+                return
+            except Exception as exc:
+                if isinstance(exc, LlmClientError):
+                    raise
+                if isinstance(exc, HTTPError) and not self._is_retryable_http_error(exc):
+                    raise LlmClientError(self._http_error_message(exc)) from exc
+                last_error = exc
+                attempt += 1
+                should_stop_retrying = (
+                    yielded_any
+                    or attempt >= max_attempts
+                    or not self._is_retryable_stream_error(exc)
+                )
+                if should_stop_retrying:
+                    if isinstance(exc, HTTPError):
+                        raise LlmClientError(self._http_error_message(exc)) from exc
+                    raise LlmClientError(f"LLM 流式调用失败: {exc}") from exc
+                continue
+        if last_error is not None:
+            raise LlmClientError(f"LLM 流式调用失败: {last_error}") from last_error
 
     def _build_request(self, prompt: str, *, stream: bool) -> tuple[Request, str]:
         api_format = self._api_format()
@@ -421,6 +443,18 @@ class OpenAICompatibleGenerationClient:
             message = self._error_message_from_text(text) or self._snippet(text)
             return f"LLM 调用失败: HTTP {exc.code} {exc.reason}: {message}"
         return f"LLM 调用失败: HTTP {exc.code} {exc.reason}"
+
+    def _is_retryable_stream_error(self, exc: Exception) -> bool:
+        if isinstance(exc, HTTPError):
+            return self._is_retryable_http_error(exc)
+        if isinstance(exc, URLError | TimeoutError | ConnectionError):
+            return True
+        if isinstance(exc, OSError):
+            return True
+        return False
+
+    def _is_retryable_http_error(self, exc: HTTPError) -> bool:
+        return exc.code in {408, 429, 500, 502, 503, 504}
 
     def _error_message_from_text(self, text: str) -> str | None:
         try:

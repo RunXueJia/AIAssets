@@ -276,8 +276,8 @@
           </div>
 
           <div class="stream-content" ref="streamContent" @scroll.passive="handleStreamScroll">
-            <div v-if="streamErrorMessage" class="content-card error-card">
-              <div class="card-label"><el-icon><Warning /></el-icon>生成失败</div>
+            <div v-if="streamErrorMessage" class="content-card" :class="streamMessageCardClass">
+              <div class="card-label"><el-icon><Warning /></el-icon>{{ streamMessageTitle }}</div>
               <p>{{ streamErrorMessage }}</p>
             </div>
             <div v-if="weatherSummary" class="content-card weather-card">
@@ -302,6 +302,20 @@
                 alt="路线图"
                 @load="scrollOutputToBottom"
               />
+              <div v-if="navigationWaypointItems.length" class="waypoint-strip">
+                <span class="waypoint-title">途径</span>
+                <span
+                  v-for="(item, index) in navigationWaypointItems"
+                  :key="`${item.location || item.name}-${index}`"
+                  class="waypoint-chip"
+                  :title="waypointTitle(item)"
+                >
+                  <span class="waypoint-name">{{ item.name || item.location }}</span>
+                  <span v-if="waypointSourceLabel(item.source)" class="waypoint-source">
+                    {{ waypointSourceLabel(item.source) }}
+                  </span>
+                </span>
+              </div>
               <div v-if="mapMeta" class="source-meta">{{ mapMeta }}</div>
               <div class="map-actions">
                 <a v-if="amapUrl" :href="amapUrl" target="_blank" class="amap-link">打开高德路线</a>
@@ -509,12 +523,14 @@ const routeSummary = ref('')
 const transportSummary = ref('')
 const amapUrl = ref('')
 const routeMapImage = ref('')
+const navigationWaypointItems = ref([])
 const mapSource = ref(null)
 const attractionsSummary = ref('')
 const realtimeSummary = ref('')
 const realtimeSource = ref(null)
 const finalMarkdown = ref('')
 const streamErrorMessage = ref('')
+const streamRecoverableWarning = ref(false)
 const duration = ref('')
 const recordId = ref(null)
 const outputState = ref(null)
@@ -538,6 +554,12 @@ const statusLabel = computed(() => {
   if (outputState.value?.status === 'canceled') return '已取消'
   return ''
 })
+const streamMessageTitle = computed(() => (
+  streamRecoverableWarning.value ? '阶段已降级' : '生成失败'
+))
+const streamMessageCardClass = computed(() => (
+  streamRecoverableWarning.value ? 'warning-card' : 'error-card'
+))
 
 const renderedTokens = computed(() => marked.parse(streamTokens.value))
 const renderedMarkdown = computed(() => finalMarkdown.value ? marked.parse(finalMarkdown.value) : '')
@@ -570,13 +592,65 @@ function formatSourceMeta(meta) {
   return parts.join(' · ')
 }
 
+function normalizeWaypointItems(...sources) {
+  const items = []
+  const seen = new Set()
+  for (const source of sources) {
+    if (!source) continue
+    const namedItems = source.navigation_waypoint_items || source.recommended_waypoint_items || []
+    for (const item of namedItems) {
+      if (!item || typeof item !== 'object') continue
+      const key = item.location || item.name
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        name: item.name || item.location || '途径点',
+        location: item.location || '',
+        source: item.source || '',
+        reason: item.reason || '',
+        source_title: item.source_title || '',
+        source_url: item.source_url || '',
+      })
+    }
+    const locations = source.navigation_waypoints || source.requested_waypoints || []
+    for (const location of locations) {
+      if (!location || seen.has(location)) continue
+      seen.add(location)
+      items.push({ name: location, location, source: '', reason: '' })
+    }
+  }
+  return items.slice(0, 5)
+}
+
+function waypointSourceLabel(source) {
+  if (source === 'web_search') return '全网'
+  if (source === 'amap_poi') return '高德'
+  return ''
+}
+
+function waypointTitle(item) {
+  const parts = [item.name, item.reason, item.source_title, item.source_url].filter(Boolean)
+  return parts.join(' · ')
+}
+
 function failGeneration(message, data = {}) {
   streaming.value = false
+  streamRecoverableWarning.value = false
   streamErrorMessage.value = message || '生成失败'
   outputState.value = { status: 'failed' }
   if (data.duration_ms) duration.value = `${(data.duration_ms / 1000).toFixed(1)}s`
   stages.forEach(s => { s.active = false })
   ElMessage.error(streamErrorMessage.value)
+}
+
+function handleStreamError(data) {
+  if (data?.error_code === 'LLM_STAGE_FAILED') {
+    streamRecoverableWarning.value = true
+    streamErrorMessage.value = data.message || '当前阶段大模型输出中断，已降级继续生成。'
+    ElMessage.warning(streamErrorMessage.value)
+    return
+  }
+  failGeneration(data?.message || '生成失败', data)
 }
 
 async function handleGenerate() {
@@ -618,11 +692,15 @@ async function handleGenerate() {
           weatherSummary.value = data.data?.weather_summary || data.data?.summary || ''
           weatherSource.value = buildSourceMeta(data.data)
         }
-        else if (data.type === 'route') routeSummary.value = data.data?.route_summary || ''
+        else if (data.type === 'route') {
+          routeSummary.value = data.data?.route_summary || ''
+          navigationWaypointItems.value = normalizeWaypointItems(data.data)
+        }
         else if (data.type === 'transport') transportSummary.value = data.data?.transport_summary || ''
         else if (data.type === 'map_export') {
           amapUrl.value = data.data?.amap_route_url || ''
           routeMapImage.value = data.data?.image_url || data.data?.route_map_image || ''
+          navigationWaypointItems.value = normalizeWaypointItems(data.data)
           mapSource.value = buildSourceMeta(data.data)
         }
         else if (data.type === 'attractions') attractionsSummary.value = data.data?.attractions_summary || ''
@@ -649,7 +727,7 @@ async function handleGenerate() {
         scrollOutputToBottom()
       },
       onError(data) {
-        failGeneration(data.message || '生成失败', data)
+        handleStreamError(data)
       },
       onClose() { streaming.value = false },
     },
@@ -684,11 +762,20 @@ async function loadRecordDetail(id) {
     }
     const weatherSnapshot = res.data?.snapshots?.weather?.[0]
     if (weatherSnapshot) weatherSource.value = buildSourceMeta(weatherSnapshot)
+    const resultJson = output?.result_json || {}
+    navigationWaypointItems.value = normalizeWaypointItems(
+      resultJson.map_export,
+      resultJson.route,
+      res.data?.snapshots?.routes?.[0],
+    )
     const mapExport = res.data?.snapshots?.map_exports?.[0]
     if (mapExport) {
       amapUrl.value = amapUrl.value || mapExport.amap_route_url || ''
       routeMapImage.value = mapExport.image_url || routeMapImage.value
       mapSource.value = buildSourceMeta(mapExport)
+      if (!navigationWaypointItems.value.length) {
+        navigationWaypointItems.value = normalizeWaypointItems(mapExport)
+      }
     }
     const realtimeSnapshots = res.data?.snapshots?.realtime_info || {}
     const realtimeItems = [
@@ -717,12 +804,14 @@ function resetOutput() {
   transportSummary.value = ''
   amapUrl.value = ''
   routeMapImage.value = ''
+  navigationWaypointItems.value = []
   mapSource.value = null
   attractionsSummary.value = ''
   realtimeSummary.value = ''
   realtimeSource.value = null
   finalMarkdown.value = ''
   streamErrorMessage.value = ''
+  streamRecoverableWarning.value = false
   duration.value = ''
   recordId.value = null
   outputState.value = null
@@ -1451,6 +1540,16 @@ onMounted(async () => {
       color: $color-danger;
     }
   }
+
+  &.warning-card {
+    background: rgba($color-warning, 0.08);
+    border: 1px solid rgba($color-warning, 0.22);
+
+    .card-label,
+    p {
+      color: $color-warning;
+    }
+  }
 }
 
 .map-card .amap-link {
@@ -1476,6 +1575,48 @@ onMounted(async () => {
   border-radius: $radius-sm;
   margin-bottom: 10px;
   border: 1px solid $border-light;
+}
+
+.waypoint-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.waypoint-title {
+  font-size: $font-size-xs;
+  font-weight: 600;
+  color: $text-hint;
+}
+
+.waypoint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 4px 9px;
+  color: $text-secondary;
+  font-size: $font-size-xs;
+  line-height: 1.35;
+  background: $page-bg;
+  border: 1px solid $border-light;
+  border-radius: 999px;
+}
+
+.waypoint-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waypoint-source {
+  flex: 0 0 auto;
+  color: $color-primary;
+  font-weight: 600;
 }
 
 .map-actions {

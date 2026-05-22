@@ -1,4 +1,5 @@
 from unittest.mock import patch
+from urllib.error import URLError
 
 import pytest
 
@@ -29,6 +30,17 @@ class _FakeResponse:
 
     def __exit__(self, exc_type, exc, tb):
         return False
+
+
+class _FailingStreamResponse(_FakeResponse):
+    def __init__(self, lines: list[bytes], error: Exception) -> None:
+        super().__init__(b"", "text/event-stream")
+        self._lines = lines
+        self._error = error
+
+    def __iter__(self):
+        yield from self._lines
+        raise self._error
 
 
 def _client() -> OpenAICompatibleGenerationClient:
@@ -84,6 +96,36 @@ def test_responses_api_stream_extracts_output_text_delta() -> None:
 
     with patch("app.integrations.llm.client.urlopen", return_value=_FakeResponse(body)):
         assert list(client._stream_text_sync("hello")) == ["O", "K"]
+
+
+def test_stream_retries_transient_connection_reset_before_first_token() -> None:
+    client = _client()
+    body = b'data: {"choices":[{"delta":{"content":"OK"}}]}\n\n'
+
+    with patch(
+        "app.integrations.llm.client.urlopen",
+        side_effect=[URLError("connection reset"), _FakeResponse(body, "text/event-stream")],
+    ) as mocked_urlopen:
+        assert list(client._stream_text_sync("hello")) == ["OK"]
+
+    assert mocked_urlopen.call_count == 2
+
+
+def test_stream_does_not_retry_after_tokens_were_emitted() -> None:
+    client = _client()
+    response = _FailingStreamResponse(
+        [b'data: {"choices":[{"delta":{"content":"O"}}]}\n', b"\n"],
+        URLError("connection reset"),
+    )
+
+    with patch("app.integrations.llm.client.urlopen", return_value=response) as mocked_urlopen:
+        stream = client._stream_text_sync("hello")
+        assert next(stream) == "O"
+        with pytest.raises(LlmClientError) as exc_info:
+            next(stream)
+
+    assert mocked_urlopen.call_count == 1
+    assert "connection reset" in str(exc_info.value)
 
 
 def test_anthropic_messages_stream_extracts_text_delta() -> None:

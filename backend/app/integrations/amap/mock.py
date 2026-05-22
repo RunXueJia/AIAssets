@@ -46,12 +46,22 @@ class MockAmapClient:
             "route_summary": "约12.8公里，预计40分钟",
             "mock": True,
             "provider": self.provider,
+            "transport_mode": transport_mode,
+            "origin_location": origin,
+            "destination_location": destination,
+            "waypoints": waypoints,
+            "route_path_points": [],
+            "route_waypoints_source": "requested" if waypoints else "none",
+            "requested_waypoints": waypoints,
             "raw": {
                 "provider": self.provider,
                 "origin": origin,
                 "destination": destination,
                 "transport_mode": transport_mode,
                 "waypoints": waypoints,
+                "route_path_points": [],
+                "route_waypoints_source": "requested" if waypoints else "none",
+                "requested_waypoints": waypoints,
             },
         }
 
@@ -63,25 +73,28 @@ class MockAmapClient:
         destination_name: str,
         destination: str,
         transport_mode: str,
-        waypoints: list[str] | None = None,
+        waypoints: list[str | dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
+        waypoint_items = [_normalize_waypoint(waypoint) for waypoint in waypoints or []]
+        waypoint_items = [item for item in waypoint_items if item is not None]
         params = {
             "from": f"{origin},{origin_name}",
             "to": f"{destination},{destination_name}",
             "mode": _uri_transport_mode(transport_mode),
             "src": "routecraft",
         }
-        if params["mode"] == "car" and waypoints:
+        if params["mode"] in {"car", "ride"} and waypoint_items:
             vianames = "|".join(
-                f"途径点{index}" for index, _ in enumerate(waypoints, start=1)
+                item["name"] or f"途径点{index}"
+                for index, item in enumerate(waypoint_items, start=1)
             )
             schema = (
                 "amapuri://drive/multiViaPointPlan?"
                 f"sid=&slat=30.29191&slon=120.21201&sname={origin_name}"
                 f"&did=&dlat=30.236064&dlon=120.143222&dname={destination_name}"
-                f"&m=&dev=0&t=11&vian={len(waypoints)}"
-                f"&vialons={'|'.join(item.split(',', 1)[0] for item in waypoints)}"
-                f"&vialats={'|'.join(item.split(',', 1)[1] for item in waypoints)}"
+                f"&m=&dev=0&t=11&vian={len(waypoint_items)}"
+                f"&vialons={'|'.join(item['location'].split(',', 1)[0] for item in waypoint_items)}"
+                f"&vialats={'|'.join(item['location'].split(',', 1)[1] for item in waypoint_items)}"
                 f"&vianames={vianames}"
             )
             return {
@@ -147,6 +160,18 @@ def _size_part(size: str, index: int) -> int | None:
         return int(parts[index])
     except ValueError:
         return None
+
+
+def _normalize_waypoint(waypoint: str | dict[str, Any]) -> dict[str, str] | None:
+    if isinstance(waypoint, str):
+        value = waypoint.strip()
+        if not value or "," not in value:
+            return None
+        return {"location": value, "name": ""}
+    location = str(waypoint.get("location") or "").strip()
+    if not location or "," not in location:
+        return None
+    return {"location": location, "name": str(waypoint.get("name") or "").strip()}
 
 
 def _uri_transport_mode(transport_mode: str) -> str:

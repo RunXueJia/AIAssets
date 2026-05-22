@@ -265,6 +265,10 @@ class RecordsRepository:
                 request_params={
                     "origin": input_payload["origin_text"],
                     "destination": input_payload["destination_text"],
+                    "requested_waypoints": data.get("requested_waypoints") or [],
+                    "recommended_waypoint_items": data.get("recommended_waypoint_items") or [],
+                    "waypoint_search": data.get("waypoint_search") or {},
+                    "route_waypoints_source": data.get("route_waypoints_source"),
                 },
                 response_data=data,
                 source_updated_at=self._coerce_datetime(data.get("source_updated_at")),
@@ -273,6 +277,7 @@ class RecordsRepository:
             await db.flush()
             return snapshot.id
         elif snapshot_type == "map_export":
+            error_message = data.get("error_message") or data.get("fallback_reason")
             export = RouteMapExport(
                 record_id=record_id,
                 route_snapshot_id=data.get("route_snapshot_id"),
@@ -283,7 +288,7 @@ class RecordsRepository:
                 storage_path=data.get("storage_path"),
                 width=data.get("width"),
                 height=data.get("height"),
-                error_message=data.get("error_message"),
+                error_message=self._limit_text(error_message, 500),
             )
             db.add(export)
             await db.flush()
@@ -544,3 +549,9 @@ class RecordsRepository:
         if not scores:
             return None
         return round(sum(scores) / len(scores), 2)
+
+    def _limit_text(self, value: Any, max_length: int) -> str | None:
+        if value is None:
+            return None
+        text = str(value)
+        return text[:max_length] if len(text) > max_length else text

@@ -42,7 +42,7 @@ class AmapService:
             destination_name=payload.destination_name,
             destination=payload.destination,
             transport_mode=payload.transport_mode,
-            waypoints=payload.waypoints,
+            waypoints=[self._waypoint_payload(item) for item in payload.waypoints],
         )
         return AmapRouteLinkResponse.model_validate(data).model_dump(mode="json")
 
@@ -69,3 +69,12 @@ class AmapService:
             return None
         value = value.strip()
         return value or None
+
+    def _waypoint_payload(self, value: str | dict[str, Any]) -> str | dict[str, str]:
+        if isinstance(value, str):
+            return value
+        return {
+            key: str(item)
+            for key, item in value.items()
+            if key in {"name", "location"} and item is not None
+        }

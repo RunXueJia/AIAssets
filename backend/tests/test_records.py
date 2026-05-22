@@ -7,6 +7,7 @@ import pytest
 
 from app.api.v1.endpoints import admin_records, planning_records
 from app.core.exceptions import AppException
+from app.models import GenerationOutput, RouteMapExport
 from app.schemas.records import RegenerateRecordRequest
 from app.services.records import RecordsService
 
@@ -41,6 +42,7 @@ def test_record_routers_expose_integration_contract_paths() -> None:
     assert "/planning/records" in planning_paths
     assert "/planning/records/{record_id}" in planning_paths
     assert "/planning/records/{record_id}/stream" in planning_paths
+    assert "/planning/records/{record_id}/generate_stream" in planning_paths
     assert "/planning/records/{record_id}/route_map" in planning_paths
     assert "/planning/records/{record_id}/regenerate" in planning_paths
     assert "/planning/records/{record_id}/retry" in planning_paths
@@ -48,6 +50,16 @@ def test_record_routers_expose_integration_contract_paths() -> None:
     assert "/admin/generation_records/{record_id}" in admin_paths
     assert "/admin/generation_records/{record_id}/retry" in admin_paths
     assert "/admin/generation_records/{record_id}" in admin_paths
+
+
+def test_map_url_columns_accept_long_amap_links() -> None:
+    long_url = "https://act.amap.com/activity/2020CommonLanding/index.html?" + ("x" * 2200)
+
+    output = GenerationOutput(record_id=101, amap_route_url=long_url)
+    export = RouteMapExport(record_id=101, export_type="static", amap_route_url=long_url)
+
+    assert output.amap_route_url == long_url
+    assert export.amap_route_url == long_url
 
 
 def test_list_planning_records_returns_paginated_payload() -> None:
@@ -313,3 +325,34 @@ def test_retry_planning_record_copies_failed_input() -> None:
     assert data["parent_record_id"] == 101
     assert data["stream_url"] == "/api/v1/planning/records/103/stream"
     assert data["request_payload"]["transport_mode"] == "motorcycle"
+
+
+def test_existing_record_stream_request_uses_record_snapshot() -> None:
+    detail = {
+        "record": {
+            "origin_text": "旧起点",
+            "destination_text": "旧终点",
+            "range_text": "旧范围",
+            "transport_mode": "driving",
+        },
+        "input": {
+            "origin_text": "杭州东站",
+            "destination_text": "西湖景区",
+            "range_text": "一天，尽量少走路",
+            "travel_date": "2026-06-01",
+            "people_count": 2,
+            "preferences": ["自然风光", "咖啡"],
+            "avoidances": ["少换乘"],
+        },
+    }
+
+    request = planning_records._request_from_detail(detail)
+
+    assert request.origin == "杭州东站"
+    assert request.destination == "西湖景区"
+    assert request.range == "一天，尽量少走路"
+    assert request.transport_mode == "driving"
+    assert request.travel_date == date(2026, 6, 1)
+    assert request.people_count == 2
+    assert request.preferences == ["自然风光", "咖啡"]
+    assert request.avoidances == ["少换乘"]

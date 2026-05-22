@@ -80,6 +80,12 @@ class RecordsService:
                 "amap_route_url": getattr(default_export, "amap_route_url", None)
                 or getattr(output, "amap_route_url", None),
                 "image_url": getattr(default_export, "image_url", None),
+                "navigation_waypoints": self._output_result_json(output)
+                .get("map_export", {})
+                .get("navigation_waypoints", []),
+                "navigation_waypoint_items": self._output_result_json(output)
+                .get("map_export", {})
+                .get("navigation_waypoint_items", []),
                 "export_type": getattr(default_export, "export_type", None),
                 "status": getattr(default_export, "status", None),
                 "width": getattr(default_export, "width", None),
@@ -377,7 +383,7 @@ class RecordsService:
             return RecordOutputSnapshot().model_dump(mode="json")
         return RecordOutputSnapshot(
             final_markdown=output.final_markdown,
-            result_json=output.result_json or {},
+            result_json=self._output_result_json(output),
             weather_summary=output.weather_summary,
             route_summary=output.route_summary,
             attractions_summary=output.attractions_summary,
@@ -394,6 +400,14 @@ class RecordsService:
             "origin_location": item.origin_location,
             "destination_location": item.destination_location,
             "waypoints": item.waypoints or [],
+            "route_path_points": (item.response_data or {}).get("route_path_points") or [],
+            "route_waypoints_source": (item.response_data or {}).get("route_waypoints_source"),
+            "requested_waypoints": (item.response_data or {}).get("requested_waypoints") or [],
+            "recommended_waypoint_items": (item.response_data or {}).get(
+                "recommended_waypoint_items"
+            )
+            or [],
+            "waypoint_search": (item.response_data or {}).get("waypoint_search") or {},
             "distance_m": item.distance_m,
             "duration_s": item.duration_s,
             "request_params": item.request_params or {},
@@ -410,11 +424,26 @@ class RecordsService:
             "status": item.status,
             "amap_route_url": item.amap_route_url,
             "image_url": item.image_url,
+            "navigation_waypoints": (item.response_data or {}).get("navigation_waypoints", [])
+            if hasattr(item, "response_data")
+            else [],
+            "navigation_waypoint_items": (item.response_data or {}).get(
+                "navigation_waypoint_items",
+                [],
+            )
+            if hasattr(item, "response_data")
+            else [],
             "width": item.width,
             "height": item.height,
             "error_message": item.error_message,
             "created_at": item.created_at,
         }
+
+    def _output_result_json(self, output: Any | None) -> dict[str, Any]:
+        if output is None:
+            return {}
+        value = getattr(output, "result_json", None)
+        return value if isinstance(value, dict) else {}
 
     def _weather_snapshot(self, item: Any) -> dict[str, Any]:
         return {

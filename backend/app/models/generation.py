@@ -86,7 +86,7 @@ class GenerationOutput(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     attractions_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     realtime_info_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     risk_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
-    amap_route_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
+    amap_route_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     map_export_id: Mapped[int | None] = mapped_column(BIGINT(unsigned=True), nullable=True)
     output_version: Mapped[int] = mapped_column(
         INTEGER(unsigned=True), nullable=False, server_default=text("1")

@@ -12,7 +12,7 @@
             <span class="status-badge" :class="recordStatus">{{ statusLabel(recordStatus) }}</span>
             <span class="info-tag">{{ transportLabel(detail.record?.transport_mode) }}</span>
             <span class="info-tag" v-if="detail.record?.duration_ms">{{ (detail.record.duration_ms / 1000).toFixed(1) }}s</span>
-            <span class="info-tag">{{ detail.record?.created_at }}</span>
+            <span v-if="detail.record?.created_at" class="info-tag">{{ detail.record.created_at }}</span>
           </div>
         </div>
         <button
@@ -24,6 +24,15 @@
         >
           <el-icon><Refresh /></el-icon> 重试
         </button>
+        <button
+          v-else-if="recordStatus === 'completed'"
+          type="button"
+          class="regenerate-btn"
+          :disabled="streaming || regenerating"
+          @click="handleRegenerate"
+        >
+          <el-icon><Refresh /></el-icon> {{ regenerating ? '重新生成中' : '重新生成' }}
+        </button>
       </div>
 
       <div v-if="streaming || streamTokens || streamErrorMessage" class="section-card process-card">
@@ -32,7 +41,7 @@
           <span v-if="currentStageName" class="stage-pill">{{ currentStageName }}</span>
           <button v-if="streaming" type="button" class="stop-btn" @click="stopStream">停止</button>
         </div>
-        <p v-if="streamErrorMessage" class="error-text">{{ streamErrorMessage }}</p>
+        <p v-if="streamErrorMessage" :class="streamMessageClass">{{ streamErrorMessage }}</p>
         <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
         <span v-if="streaming" class="cursor-blink">|</span>
       </div>
@@ -49,6 +58,20 @@
         <div v-if="amapRouteUrl || routeMapImage" class="section-card">
           <h4><el-icon><Location /></el-icon>高德路线</h4>
           <img v-if="routeMapImage" :src="routeMapImage" class="route-map-img" alt="路线图" />
+          <div v-if="navigationWaypointItems.length" class="waypoint-strip">
+            <span class="waypoint-title">途径</span>
+            <span
+              v-for="(item, index) in navigationWaypointItems"
+              :key="`${item.location || item.name}-${index}`"
+              class="waypoint-chip"
+              :title="waypointTitle(item)"
+            >
+              <span class="waypoint-name">{{ item.name || item.location }}</span>
+              <span v-if="waypointSourceLabel(item.source)" class="waypoint-source">
+                {{ waypointSourceLabel(item.source) }}
+              </span>
+            </span>
+          </div>
           <a v-if="amapRouteUrl" :href="amapRouteUrl" target="_blank" class="amap-link">打开高德路线 →</a>
         </div>
         <div v-if="detail.output.attractions_summary" class="section-card">
@@ -95,8 +118,10 @@ const router = useRouter()
 const { loading, withLoading } = useLoading()
 const detail = ref(null)
 const streaming = ref(false)
+const regenerating = ref(false)
 const streamTokens = ref('')
 const streamErrorMessage = ref('')
+const streamRecoverableWarning = ref(false)
 const currentStageName = ref('')
 const consumedSequence = ref(0)
 const activeStreamRecordId = ref(null)
@@ -104,6 +129,7 @@ let streamClient = null
 let streamRunId = 0
 let intentionalStop = false
 let reconnectTimer = null
+let skipNextRouteInitialize = false
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
 const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
@@ -112,6 +138,9 @@ function statusLabel(s) { return statusMap[s] || s }
 function transportLabel(t) { return transportMap[t] || t }
 
 const recordStatus = computed(() => detail.value?.record?.status || '')
+const streamMessageClass = computed(() => (
+  streamRecoverableWarning.value ? 'warning-text' : 'error-text'
+))
 const renderedMarkdown = computed(() => {
   if (detail.value?.output?.final_markdown) {
     return marked.parse(detail.value.output.final_markdown)
@@ -131,6 +160,13 @@ const amapRouteUrl = computed(() => (
   || routeMap.value?.amap_route_url
   || latestMapExport.value?.amap_route_url
   || ''
+))
+const navigationWaypointItems = computed(() => normalizeWaypointItems(
+  detail.value?.output?.result_json?.map_export,
+  detail.value?.output?.result_json?.route,
+  detail.value?.snapshots?.routes?.[0],
+  routeMap.value,
+  latestMapExport.value,
 ))
 const routeMap = ref(null)
 
@@ -153,14 +189,57 @@ function firstErrorMessage(errors = []) {
 }
 
 function patchOutput(values) {
+  if (!detail.value) return
   detail.value.output = {
     ...(detail.value.output || {}),
     ...values,
   }
 }
 
+function normalizeWaypointItems(...sources) {
+  const items = []
+  const seen = new Set()
+  for (const source of sources) {
+    if (!source) continue
+    const namedItems = source.navigation_waypoint_items || source.recommended_waypoint_items || []
+    for (const item of namedItems) {
+      if (!item || typeof item !== 'object') continue
+      const key = item.location || item.name
+      if (!key || seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        name: item.name || item.location || '途径点',
+        location: item.location || '',
+        source: item.source || '',
+        reason: item.reason || '',
+        source_title: item.source_title || '',
+        source_url: item.source_url || '',
+      })
+    }
+    const locations = source.navigation_waypoints || source.requested_waypoints || []
+    for (const location of locations) {
+      if (!location || seen.has(location)) continue
+      seen.add(location)
+      items.push({ name: location, location, source: '', reason: '' })
+    }
+  }
+  return items.slice(0, 5)
+}
+
+function waypointSourceLabel(source) {
+  if (source === 'web_search') return '全网'
+  if (source === 'amap_poi') return '高德'
+  return ''
+}
+
+function waypointTitle(item) {
+  const parts = [item.name, item.reason, item.source_title, item.source_url].filter(Boolean)
+  return parts.join(' · ')
+}
+
 function handleSnapshot(data) {
   updateActiveRecordId(data.record_id)
+  if (!detail.value) return
   const payload = data.data || {}
   if (data.type === 'weather') {
     patchOutput({ weather_summary: payload.weather_summary || payload.summary || detail.value.output?.weather_summary || '' })
@@ -216,13 +295,21 @@ function createRecordStream(url, method = 'GET', body) {
         detail.value.record.duration_ms = data.duration_ms || detail.value.record.duration_ms
       }
       if (data.status === 'failed') {
+        streamRecoverableWarning.value = false
         streamErrorMessage.value = data.message || '生成失败'
       }
       refreshTerminalDetail(activeStreamRecordId.value || route.params.recordId, { replaceRoute: true })
     },
     onError(data) {
       updateActiveRecordId(data.record_id)
+      if (data.error_code === 'LLM_STAGE_FAILED') {
+        streamRecoverableWarning.value = true
+        streamErrorMessage.value = data.message || '当前阶段大模型输出中断，已降级继续生成。'
+        ElMessage.warning(streamErrorMessage.value)
+        return
+      }
       streaming.value = false
+      streamRecoverableWarning.value = false
       streamErrorMessage.value = data.message || '生成失败'
       if (detail.value?.record) detail.value.record.status = 'failed'
       refreshTerminalDetail(activeStreamRecordId.value || route.params.recordId, { replaceRoute: true })
@@ -243,11 +330,25 @@ function createRecordStream(url, method = 'GET', body) {
   })
 }
 
+function prepareStreamState(recordId = null) {
+  stopStream()
+  intentionalStop = false
+  streaming.value = true
+  streamTokens.value = ''
+  streamErrorMessage.value = ''
+  streamRecoverableWarning.value = false
+  currentStageName.value = ''
+  consumedSequence.value = 0
+  activeStreamRecordId.value = recordId
+  routeMap.value = null
+}
+
 async function resumeStream(afterSequence = consumedSequence.value) {
   intentionalStop = false
   consumedSequence.value = afterSequence
   streaming.value = true
   streamErrorMessage.value = ''
+  streamRecoverableWarning.value = false
   const streamRecordId = activeStreamRecordId.value || route.params.recordId
   streamClient = createRecordStream('', 'GET')
   try {
@@ -256,6 +357,7 @@ async function resumeStream(afterSequence = consumedSequence.value) {
   } catch (error) {
     if (intentionalStop) return
     streaming.value = false
+    streamRecoverableWarning.value = false
     streamErrorMessage.value = error.message || '续接生成失败'
     ElMessage.error(streamErrorMessage.value)
     fetchDetail()
@@ -263,22 +365,65 @@ async function resumeStream(afterSequence = consumedSequence.value) {
 }
 
 async function handleRetry() {
-  stopStream()
-  intentionalStop = false
-  streaming.value = true
-  streamTokens.value = ''
-  streamErrorMessage.value = ''
-  consumedSequence.value = 0
-  activeStreamRecordId.value = null
+  prepareStreamState(null)
   const url = `${import.meta.env.VITE_API_BASE_URL}/api/v1/planning/records/${route.params.recordId}/retry`
   streamClient = createRecordStream(url, 'POST')
   try {
     await streamClient.connect()
   } catch (error) {
     streaming.value = false
+    streamRecoverableWarning.value = false
     streamErrorMessage.value = error.message || '重试失败'
     ElMessage.error(streamErrorMessage.value)
     fetchDetail()
+  }
+}
+
+async function handleRegenerate() {
+  regenerating.value = true
+  try {
+    const res = await planningApi.regenerate(route.params.recordId, {})
+    const nextRecordId = res.data?.record_id
+    if (!nextRecordId) {
+      throw new Error('重新生成任务数据缺失')
+    }
+
+    prepareStreamState(nextRecordId)
+    const nextDetail = buildPendingRegenerationDetail(nextRecordId)
+    if (nextDetail) detail.value = nextDetail
+    if (Number(nextRecordId) !== Number(route.params.recordId)) {
+      skipNextRouteInitialize = true
+      await router.replace(`/history/${nextRecordId}`)
+    }
+    streamClient = createRecordStream('', 'POST')
+    const response = await planningApi.generateExistingRecordStream(nextRecordId)
+    await streamClient.connectResponse(response)
+  } catch (error) {
+    streaming.value = false
+    streamRecoverableWarning.value = false
+    streamErrorMessage.value = error.message || '重新生成失败'
+    ElMessage.error(streamErrorMessage.value)
+    fetchDetail()
+  } finally {
+    regenerating.value = false
+  }
+}
+
+function buildPendingRegenerationDetail(recordId) {
+  if (!detail.value) return null
+  return {
+    record: {
+      ...detail.value.record,
+      id: recordId,
+      status: 'pending',
+      current_stage: null,
+      duration_ms: null,
+      created_at: '',
+    },
+    input: { ...(detail.value.input || {}) },
+    output: {},
+    snapshots: { routes: [], map_exports: [], weather: [], realtime_info: {} },
+    errors: [],
   }
 }
 
@@ -327,7 +472,13 @@ function shouldResumeRecord(status) {
   return status === 'streaming' || status === 'pending'
 }
 
-watch(() => route.params.recordId, () => initialize())
+watch(() => route.params.recordId, () => {
+  if (skipNextRouteInitialize) {
+    skipNextRouteInitialize = false
+    return
+  }
+  initialize()
+})
 
 onMounted(() => initialize())
 onBeforeUnmount(() => stopStream())
@@ -396,6 +547,7 @@ onBeforeUnmount(() => stopStream())
 }
 
 .retry-btn,
+.regenerate-btn,
 .stop-btn {
   display: inline-flex;
   align-items: center;
@@ -414,6 +566,33 @@ onBeforeUnmount(() => stopStream())
 
   &:disabled {
     opacity: 0.6;
+    cursor: not-allowed;
+  }
+}
+
+.regenerate-btn {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  color: $text-secondary;
+  background: $content-bg;
+  border: 1px solid $border-light;
+  border-radius: 999px;
+  font-size: $font-size-xs;
+  font-weight: 500;
+  line-height: 1;
+
+  .el-icon {
+    font-size: 14px;
+  }
+
+  &:hover:not(:disabled) {
+    color: $text-primary;
+    border-color: $text-hint;
+    background: $page-bg;
+  }
+
+  &:disabled {
+    opacity: 0.55;
     cursor: not-allowed;
   }
 }
@@ -485,6 +664,10 @@ onBeforeUnmount(() => stopStream())
   color: $color-danger;
 }
 
+.warning-text {
+  color: $color-warning;
+}
+
 .stream-tokens {
   line-height: 1.8;
 }
@@ -511,6 +694,48 @@ onBeforeUnmount(() => stopStream())
   border-radius: $radius-sm;
   border: 1px solid $border-light;
   margin-bottom: 10px;
+}
+
+.waypoint-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.waypoint-title {
+  font-size: $font-size-xs;
+  font-weight: 600;
+  color: $text-hint;
+}
+
+.waypoint-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 26px;
+  padding: 4px 9px;
+  color: $text-secondary;
+  font-size: $font-size-xs;
+  line-height: 1.35;
+  background: $page-bg;
+  border: 1px solid $border-light;
+  border-radius: 999px;
+}
+
+.waypoint-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.waypoint-source {
+  flex: 0 0 auto;
+  color: $color-primary;
+  font-weight: 600;
 }
 
 .markdown :deep(h2) { font-size: 18px; margin: 16px 0 8px; }
