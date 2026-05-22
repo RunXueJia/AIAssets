@@ -6,8 +6,15 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Header, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import AppException
 from app.core.responses import ApiResponse, success_response
-from app.schemas.auth import GuestSessionRequest, LoginRequest, RefreshTokenRequest, RegisterRequest
+from app.schemas.auth import (
+    GuestSessionRequest,
+    LoginRequest,
+    RefreshTokenRequest,
+    RegisterRequest,
+    UserPublic,
+)
 from app.services.auth import AuthService, RequestContext
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -103,6 +110,20 @@ async def refresh_token(
         context=build_context(request, "web"),
     )
     return success_response(data=data)
+
+
+@router.get("/me", response_model=ApiResponse)
+async def me(
+    db: Annotated[AsyncSession, Depends(get_auth_db_session)],
+    service: Annotated[AuthService, Depends(get_auth_service)],
+    authorization: Annotated[str | None, Header()] = None,
+) -> ApiResponse:
+    access_token = extract_bearer_token(authorization)
+    if access_token is None:
+        raise AppException("请先登录", code=401, status_code=401)
+
+    user = await service.authenticate_access_token(db, access_token=access_token)
+    return success_response(data=UserPublic.model_validate(user))
 
 
 @router.post("/logout", response_model=ApiResponse)

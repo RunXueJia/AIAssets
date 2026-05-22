@@ -87,6 +87,34 @@ class RecordsRepository:
         )
         await db.flush()
 
+    async def list_stream_events_after(
+        self,
+        db: AsyncSession,
+        *,
+        record_id: int,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> list[GenerationStreamEventModel]:
+        stmt = (
+            select(GenerationStreamEventModel)
+            .where(
+                GenerationStreamEventModel.record_id == record_id,
+                GenerationStreamEventModel.sequence_no > after_sequence,
+            )
+            .order_by(GenerationStreamEventModel.sequence_no.asc())
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def max_stream_sequence(self, db: AsyncSession, *, record_id: int) -> int:
+        result = await db.execute(
+            select(func.max(GenerationStreamEventModel.sequence_no)).where(
+                GenerationStreamEventModel.record_id == record_id
+            )
+        )
+        return int(result.scalar() or 0)
+
     async def mark_record_streaming(
         self,
         db: AsyncSession,

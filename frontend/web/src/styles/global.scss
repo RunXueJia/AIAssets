@@ -10,16 +10,21 @@ html {
   font-family: $font-family;
   font-size: 16px;
   color: $text-primary;
-  background: $page-bg;
+  background:
+    radial-gradient(circle at 14% -10%, rgba($color-primary-light, 0.16), transparent 28rem),
+    radial-gradient(circle at 92% 6%, rgba($color-mint, 0.13), transparent 24rem),
+    $page-bg;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
+  text-rendering: optimizeLegibility;
 }
 
 body {
   min-height: 100vh;
   line-height: $line-height-body;
   font-size: $font-size-body;
+  background: transparent;
 }
 
 a {
@@ -27,14 +32,39 @@ a {
   text-decoration: none;
 }
 
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+button,
+a,
+.el-button {
+  -webkit-tap-highlight-color: transparent;
+}
+
+:focus-visible {
+  outline: 3px solid rgba($color-primary, 0.24);
+  outline-offset: 3px;
+}
+
 // Scrollbar
 ::-webkit-scrollbar {
-  width: 4px;
+  width: 8px;
+  height: 8px;
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 2px;
+  background: rgba($text-primary, 0.14);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 // Reset Element Plus styles to match design system
@@ -45,22 +75,101 @@ a {
   --el-button-hover-border-color: #{$color-primary-light};
   --el-button-active-bg-color: #{$color-primary};
   --el-button-active-border-color: #{$color-primary};
-  border-radius: 24px;
-  font-weight: 500;
-  letter-spacing: 0.5px;
+  border-radius: 999px;
+  font-weight: 650;
+  box-shadow: 0 12px 24px rgba($color-primary, 0.18);
+}
+
+.el-button {
+  --el-button-border-color: #{$border-light};
+  --el-button-hover-border-color: #{$color-primary};
+  --el-button-hover-text-color: #{$color-primary};
+  --el-button-active-border-color: #{$color-primary-dark};
+  min-height: 40px;
+  border-radius: 999px;
+  transition:
+    color 0.18s ease,
+    border-color 0.18s ease,
+    background-color 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
+
+  &:not(.is-disabled):hover {
+    transform: translateY(-1px);
+  }
+
+  &:not(.is-disabled):active {
+    transform: translateY(0);
+  }
+}
+
+.el-button.is-loading {
+  pointer-events: none;
 }
 
 .el-input__wrapper {
-  border-radius: 12px !important;
+  border-radius: $radius-md !important;
+  background: rgba($content-bg, 0.92) !important;
   box-shadow: 0 0 0 1px $border-light inset !important;
-  transition: box-shadow 0.2s;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
 
   &:hover {
-    box-shadow: 0 0 0 1px $text-hint inset !important;
+    box-shadow: 0 0 0 1px rgba($text-primary, 0.22) inset !important;
   }
 
   &.is-focus {
-    box-shadow: 0 0 0 2px $color-primary inset !important;
+    background: $content-bg !important;
+    box-shadow: 0 0 0 2px rgba($color-primary, 0.72) inset !important;
+  }
+}
+
+.el-input__inner,
+.el-textarea__inner {
+  color: $text-primary !important;
+
+  &::placeholder {
+    color: rgba($text-secondary, 0.58) !important;
+  }
+}
+
+.el-date-editor.el-input {
+  width: 100%;
+}
+
+.el-form-item {
+  margin-bottom: 18px;
+}
+
+.el-form-item__error {
+  color: $color-danger !important;
+  padding-top: 5px !important;
+}
+
+.el-loading-mask {
+  background-color: rgba($surface-soft, 0.72) !important;
+  backdrop-filter: blur(8px);
+}
+
+.el-loading-spinner .path {
+  stroke: $color-primary !important;
+}
+
+.el-pagination {
+  --el-pagination-button-bg-color: #{$content-bg};
+  --el-pagination-hover-color: #{$color-primary};
+  gap: 6px;
+
+  button,
+  .el-pager li {
+    min-width: 36px;
+    height: 36px;
+    border-radius: 999px;
+    box-shadow: $shadow-sm;
+  }
+
+  .el-pager li.is-active {
+    background: $text-primary;
+    color: #fff;
   }
 }
 
@@ -69,8 +178,41 @@ a {
   font-weight: 500;
 }
 
+.markdown-body,
+.final-markdown,
+.stream-tokens,
+.markdown {
+  text-wrap: pretty;
+
+  :where(h1, h2, h3, h4) {
+    color: $text-primary;
+    line-height: 1.28;
+  }
+
+  :where(p, li) {
+    color: $text-primary;
+  }
+
+  :where(a) {
+    color: $color-link;
+    font-weight: 600;
+  }
+
+  :where(code) {
+    border-radius: 5px;
+    background: rgba($text-primary, 0.06);
+    padding: 2px 5px;
+  }
+}
+
 // Mobile ElMessage adaptation
 @media (max-width: 768px) {
+  html {
+    background:
+      radial-gradient(circle at 30% -12%, rgba($color-primary-light, 0.18), transparent 22rem),
+      $page-bg;
+  }
+
   .el-message {
     min-width: auto !important;
     max-width: calc(100vw - 32px) !important;

@@ -31,7 +31,9 @@
 
     <!-- Empty -->
     <div v-else-if="!records.length" class="empty-state">
-      <div class="empty-icon">📋</div>
+      <div class="empty-icon">
+        <el-icon><Tickets /></el-icon>
+      </div>
       <p class="empty-title">
         {{ activeFilter === 'all' ? '还没有生成记录' : statusLabel(activeFilter) + '的记录暂无' }}
       </p>
@@ -100,8 +102,8 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
-import { ArrowRight } from '@element-plus/icons-vue'
-import { Van, Guide, User, Bicycle, Connection } from '@element-plus/icons-vue'
+import { ArrowRight, Tickets } from '@element-plus/icons-vue'
+import { Van, Guide, User, Bicycle, Compass, Connection } from '@element-plus/icons-vue'
 import { planningApi } from '@/api/planning'
 import { useLoading } from '@/composables/useLoading'
 import dayjs from 'dayjs'
@@ -121,8 +123,8 @@ const filters = [
 ]
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
-const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', mixed: '混合' }
-const transportIcons = { driving: Van, transit: Guide, walking: User, cycling: Bicycle, mixed: Connection }
+const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
+const transportIcons = { driving: Van, transit: Guide, walking: User, cycling: Bicycle, motorcycle: Compass, mixed: Connection }
 
 function statusLabel(s) { return statusMap[s] || s }
 function transportLabel(t) { return transportMap[t] || t }
@@ -252,7 +254,22 @@ onMounted(() => fetchRecords())
   padding: 72px 24px;
 }
 
-.empty-icon { font-size: 52px; margin-bottom: 12px; }
+.empty-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 12px;
+  color: $color-primary;
+  background: $color-primary-bg;
+  border-radius: 20px;
+
+  :deep(svg) {
+    width: 30px;
+    height: 30px;
+  }
+}
 .empty-title { font-size: 16px; font-weight: 600; color: $text-primary; margin-bottom: 6px; }
 .empty-desc { font-size: $font-size-sm; color: $text-secondary; margin-bottom: 20px; }
 
@@ -331,6 +348,7 @@ onMounted(() => fetchRecords())
   &.transit { background: rgba(#ff9500, 0.08); color: #ff9500; }
   &.walking { background: rgba($color-success, 0.08); color: $color-success; }
   &.cycling { background: rgba(#007aff, 0.08); color: #007aff; }
+  &.motorcycle { background: rgba(#8e5cf7, 0.08); color: #8e5cf7; }
   &.mixed { background: $color-primary-bg; color: $color-primary; }
 
   :deep(svg) { width: 20px; height: 20px; }

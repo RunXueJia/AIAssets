@@ -11,7 +11,7 @@ export function setupGuards(router) {
 
     if (to.meta.requiresAuth && !auth.isAuthenticated) {
       next({ path: '/login', query: { redirect: to.fullPath } })
-    } else if (to.path === '/login' && auth.isAuthenticated) {
+    } else if (to.path === '/login' && auth.isLoggedIn) {
       next('/')
     } else {
       next()

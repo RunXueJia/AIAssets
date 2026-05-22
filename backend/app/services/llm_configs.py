@@ -1,4 +1,5 @@
 import time
+from collections.abc import AsyncIterator
 from datetime import datetime
 from typing import Any
 
@@ -7,7 +8,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import get_settings
 from app.core.exceptions import AppException
 from app.core.security import decrypt_secret, encrypt_secret
-from app.integrations.llm import LlmRuntimeConfig, OpenAICompatibleGenerationClient
+from app.integrations.llm import (
+    SUPPORTED_API_FORMATS,
+    LlmRuntimeConfig,
+    OpenAICompatibleGenerationClient,
+)
 from app.models import LlmConfig
 from app.repositories.llm_configs import LlmConfigsRepository
 from app.schemas.llm_configs import (
@@ -57,9 +62,11 @@ class LlmConfigsService:
     ) -> dict[str, Any]:
         if payload.is_default:
             await self.repo.clear_default(db)
+        self._validate_api_format(payload.api_format)
         config = LlmConfig(
             name=payload.name,
             provider=payload.provider,
+            api_format=payload.api_format,
             base_url=payload.base_url,
             model_name=payload.model_name,
             api_key_encrypted=self._encrypt_api_key(payload.api_key),
@@ -97,6 +104,9 @@ class LlmConfigsService:
 
         update_data = payload.model_dump(exclude_unset=True)
         api_key = update_data.pop("api_key", None)
+        api_format = update_data.get("api_format")
+        if api_format is not None:
+            self._validate_api_format(api_format)
         for field, value in update_data.items():
             setattr(config, field, value)
         if api_key is not None and api_key.strip():
@@ -136,6 +146,53 @@ class LlmConfigsService:
             "tested_at": config.last_test_at.isoformat(),
         }
 
+    async def stream_test_config(
+        self,
+        db: AsyncSession,
+        *,
+        config_id: int,
+        test_prompt: str = "请回复 OK",
+    ) -> AsyncIterator[dict[str, Any]]:
+        config = await self._require_config(db, config_id=config_id)
+        started_at = time.perf_counter()
+        client = self.client_from_config(config, max_tokens=512)
+        content_parts: list[str] = []
+        yield {
+            "type": "start",
+            "status": "streaming",
+            "config_id": config.id,
+            "api_format": self._config_api_format(config),
+            "model_name": config.model_name,
+        }
+        try:
+            async for token in client.stream_text_tokens(test_prompt):
+                content_parts.append(token)
+                yield {"type": "token", "content": token}
+            message = "".join(content_parts).strip() or "OK"
+            config.last_test_status = "success"
+            config.last_test_message = message[:500]
+            config.last_test_at = datetime.now()
+            await db.commit()
+            yield {
+                "type": "done",
+                "status": "success",
+                "message": config.last_test_message,
+                "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                "tested_at": config.last_test_at.isoformat(),
+            }
+        except Exception as exc:
+            config.last_test_status = "failed"
+            config.last_test_message = str(exc)[:500]
+            config.last_test_at = datetime.now()
+            await db.commit()
+            yield {
+                "type": "error",
+                "status": "failed",
+                "message": config.last_test_message,
+                "duration_ms": int((time.perf_counter() - started_at) * 1000),
+                "tested_at": config.last_test_at.isoformat(),
+            }
+
     async def get_generation_client(self, db: AsyncSession) -> OpenAICompatibleGenerationClient:
         config = await self.repo.get_active_default_config(db)
         if config is None:
@@ -158,6 +215,7 @@ class LlmConfigsService:
         return OpenAICompatibleGenerationClient(
             LlmRuntimeConfig(
                 provider=config.provider,
+                api_format=self._config_api_format(config),
                 base_url=config.base_url,
                 model_name=config.model_name,
                 api_key=api_key,
@@ -190,6 +248,7 @@ class LlmConfigsService:
             id=config.id,
             name=config.name,
             provider=config.provider,
+            api_format=self._config_api_format(config),
             base_url=config.base_url,
             model_name=config.model_name,
             api_key_masked=config.api_key_masked,
@@ -218,6 +277,13 @@ class LlmConfigsService:
 
     def _decrypt_api_key(self, api_key_encrypted: str) -> str:
         return decrypt_secret(api_key_encrypted, get_settings().llm_secret_key)
+
+    def _validate_api_format(self, api_format: str) -> None:
+        if api_format not in SUPPORTED_API_FORMATS:
+            raise AppException(f"不支持的 LLM API 格式：{api_format}", code=400, status_code=400)
+
+    def _config_api_format(self, config: LlmConfig) -> str:
+        return getattr(config, "api_format", None) or "openai_chat_completions"
 
     def _blank_to_none(self, value: str | None) -> str | None:
         if value is None:

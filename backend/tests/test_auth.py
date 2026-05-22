@@ -200,6 +200,37 @@ def test_guest_session_refresh_and_logout(auth_client: AuthClient) -> None:
     assert expired_response.status_code == 401
 
 
+def test_me_returns_current_user(auth_client: AuthClient) -> None:
+    client = auth_client.client
+
+    login_response = client.post(
+        "/api/v1/auth/login",
+        json={"account": "admin", "password": "admin123456", "client_type": "admin"},
+    )
+    access_token = login_response.json()["data"]["access_token"]
+
+    response = client.get(
+        "/api/v1/auth/me",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"] == {
+        "id": 1,
+        "username": "admin",
+        "nickname": "管理员",
+        "role": "admin",
+        "status": "active",
+    }
+
+
+def test_me_requires_authentication(auth_client: AuthClient) -> None:
+    response = auth_client.client.get("/api/v1/auth/me")
+
+    assert response.status_code == 401
+    assert response.json() == {"code": 401, "message": "请先登录", "data": None}
+
+
 def test_login_rejects_invalid_password(auth_client: AuthClient) -> None:
     client = auth_client.client
 

@@ -10,4 +10,7 @@ export const authApi = {
   refreshToken(token) {
     return http.post('/api/v1/auth/refresh_token', { refresh_token: token })
   },
+  me() {
+    return http.get('/api/v1/auth/me')
+  },
 }

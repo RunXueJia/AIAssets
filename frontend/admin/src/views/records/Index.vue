@@ -1,7 +1,10 @@
 <template>
-  <div class="records-page">
-    <div class="page-header">
-      <h3>生成记录</h3>
+  <div class="records-page page-shell">
+    <div class="page-heading">
+      <div>
+        <h2>生成记录</h2>
+        <p>跟踪路线生成任务状态、耗时和处理结果。</p>
+      </div>
     </div>
 
     <div class="search-bar">
@@ -17,6 +20,7 @@
         <el-option label="公共交通" value="transit" />
         <el-option label="步行" value="walking" />
         <el-option label="骑行" value="cycling" />
+        <el-option label="摩托车" value="motorcycle" />
         <el-option label="混合" value="mixed" />
       </el-select>
       <el-input
@@ -29,46 +33,51 @@
       <el-button type="primary" @click="search">查询</el-button>
     </div>
 
-    <el-table :data="records" v-loading="loading" border stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="record_no" label="编号" min-width="140" />
-      <el-table-column prop="user_nickname" label="用户" min-width="100" />
-      <el-table-column label="路线" min-width="200">
-        <template #default="{ row }">
-          {{ row.origin_text }} → {{ row.destination_text }}
+    <div class="table-panel">
+      <el-table :data="records" v-loading="loading" border stripe>
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="record_no" label="编号" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="user_nickname" label="用户" min-width="110" show-overflow-tooltip />
+        <el-table-column label="路线" min-width="220" show-overflow-tooltip>
+          <template #default="{ row }">
+            {{ row.origin_text }} → {{ row.destination_text }}
+          </template>
+        </el-table-column>
+        <el-table-column label="交通方式" width="110">
+          <template #default="{ row }">{{ transportLabel(row.transport_mode) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="duration_ms" label="耗时" width="90">
+          <template #default="{ row }">
+            {{ row.duration_ms ? `${(row.duration_ms / 1000).toFixed(1)}s` : '-' }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="created_at" label="创建时间" min-width="170" show-overflow-tooltip />
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="$router.push(`/records/${row.id}`)">详情</el-button>
+            <el-button
+              v-if="row.status === 'failed'"
+              text
+              type="warning"
+              @click="handleRetry(row)"
+            >重试</el-button>
+            <el-popconfirm title="确认删除该记录？" @confirm="handleDelete(row)">
+              <template #reference>
+                <el-button text type="danger">删除</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无生成记录" />
         </template>
-      </el-table-column>
-      <el-table-column label="交通方式" width="100">
-        <template #default="{ row }">{{ transportLabel(row.transport_mode) }}</template>
-      </el-table-column>
-      <el-table-column label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="statusType(row.status)" size="small">{{ statusLabel(row.status) }}</el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="duration_ms" label="耗时" width="90">
-        <template #default="{ row }">
-          {{ row.duration_ms ? `${(row.duration_ms / 1000).toFixed(1)}s` : '-' }}
-        </template>
-      </el-table-column>
-      <el-table-column prop="created_at" label="创建时间" min-width="160" />
-      <el-table-column label="操作" width="220" fixed="right">
-        <template #default="{ row }">
-          <el-button text type="primary" @click="$router.push(`/records/${row.id}`)">详情</el-button>
-          <el-button
-            v-if="row.status === 'failed'"
-            text
-            type="warning"
-            @click="handleRetry(row)"
-          >重试</el-button>
-          <el-popconfirm title="确认删除该记录？" @confirm="handleDelete(row)">
-            <template #reference>
-              <el-button text type="danger">删除</el-button>
-            </template>
-          </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
 
     <div class="pagination-wrap" v-if="total > pageSize">
       <el-pagination
@@ -99,7 +108,7 @@ const userKeyword = ref('')
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
 const statusTypeMap = { pending: 'info', streaming: 'warning', completed: 'success', failed: 'danger', canceled: 'info' }
-const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
 
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }
@@ -140,7 +149,7 @@ onMounted(() => fetchRecords())
 </script>
 
 <style lang="scss" scoped>
-.page-header { margin-bottom: 20px; h3 { font-size: 18px; } }
-.search-bar { display: flex; gap: 12px; margin-bottom: 16px; }
-.pagination-wrap { display: flex; justify-content: flex-end; margin-top: 16px; }
+.records-page {
+  max-width: 1360px;
+}
 </style>

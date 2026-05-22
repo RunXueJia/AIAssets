@@ -63,16 +63,18 @@ class MockAmapClient:
         destination_name: str,
         destination: str,
         transport_mode: str,
+        waypoints: list[str] | None = None,
     ) -> dict[str, Any]:
-        params = urlencode(
-            {
-                "from": f"{origin},{origin_name}",
-                "to": f"{destination},{destination_name}",
-                "mode": transport_mode,
-            }
-        )
+        params = {
+            "from": f"{origin},{origin_name}",
+            "to": f"{destination},{destination_name}",
+            "mode": _uri_transport_mode(transport_mode),
+            "src": "routecraft",
+        }
+        if params["mode"] == "car" and waypoints:
+            params["via"] = waypoints[0]
         return {
-            "amap_route_url": f"https://uri.amap.com/navigation?{params}",
+            "amap_route_url": f"https://uri.amap.com/navigation?{urlencode(params)}",
             "mock": True,
             "provider": self.provider,
         }
@@ -115,3 +117,13 @@ def _size_part(size: str, index: int) -> int | None:
         return int(parts[index])
     except ValueError:
         return None
+
+
+def _uri_transport_mode(transport_mode: str) -> str:
+    if transport_mode in {"transit", "mixed"}:
+        return "bus"
+    if transport_mode == "walking":
+        return "walk"
+    if transport_mode in {"cycling", "motorcycle"}:
+        return "ride"
+    return "car"

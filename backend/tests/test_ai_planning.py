@@ -11,6 +11,14 @@ from app.services.realtime import RealtimeService
 from app.services.weather import WeatherService
 
 
+class FailingAmapClient(MockAmapClient):
+    async def calculate_route(self, **_kwargs):  # noqa: ANN003
+        raise RuntimeError("RESULTS_ARE_EMPTY")
+
+    async def create_route_link(self, **_kwargs):  # noqa: ANN003
+        raise RuntimeError("RESULTS_ARE_EMPTY")
+
+
 def _service() -> AiPlanningService:
     return AiPlanningService(
         weather_service=WeatherService(client=MockWeatherClient()),
@@ -62,3 +70,41 @@ def test_ai_planning_maps_stage_snapshots_and_output_payload() -> None:
     assert realtime_snapshot[1]["realtime_info_summary"]
     assert output["final_markdown"]
     assert output["result_json"]["summary_title"]
+
+
+def test_ai_planning_accepts_motorcycle_transport_mode() -> None:
+    service = _service()
+    request = GenerateStreamRequest(
+        origin="杭州东站",
+        destination="西湖景区",
+        range="半天",
+        transport_mode="motorcycle",
+    )
+
+    result = asyncio.run(service.build_result(102, request))
+
+    assert result.context.transport["transport_mode"] == "motorcycle"
+    assert "摩托车" in result.context.transport["transport_summary"]
+    assert result.context.map_export["amap_route_url"]
+
+
+def test_ai_planning_degrades_when_amap_route_is_empty() -> None:
+    service = AiPlanningService(
+        weather_service=WeatherService(client=MockWeatherClient()),
+        amap_service=AmapService(client=FailingAmapClient()),
+        realtime_service=RealtimeService(client=MockRealtimeClient()),
+    )
+    request = GenerateStreamRequest(
+        origin="巢湖",
+        destination="拉萨",
+        range="30天",
+        transport_mode="motorcycle",
+    )
+
+    result = asyncio.run(service.build_result(103, request))
+
+    assert result.context.route["distance_m"] == 0
+    assert result.context.route["fallback_reason"] == "RESULTS_ARE_EMPTY"
+    assert result.context.map_export["fallback_reason"] == "RESULTS_ARE_EMPTY"
+    assert "部分外部数据已降级" in result.risk_summary
+    assert result.final_markdown.startswith("## 巢湖到拉萨规划草案")

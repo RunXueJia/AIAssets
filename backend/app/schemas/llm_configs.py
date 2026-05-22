@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class LlmConfigCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     provider: str = Field(min_length=1, max_length=50)
+    api_format: str = Field(default="openai_chat_completions", min_length=1, max_length=50)
     base_url: str = Field(min_length=1, max_length=500)
     model_name: str = Field(min_length=1, max_length=120)
     api_key: str = Field(min_length=1)
@@ -20,6 +21,7 @@ class LlmConfigCreateRequest(BaseModel):
 class LlmConfigUpdateRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=80)
     provider: str | None = Field(default=None, min_length=1, max_length=50)
+    api_format: str | None = Field(default=None, min_length=1, max_length=50)
     base_url: str | None = Field(default=None, min_length=1, max_length=500)
     model_name: str | None = Field(default=None, min_length=1, max_length=120)
     api_key: str | None = None
@@ -44,6 +46,7 @@ class LlmConfigListItem(BaseModel):
     id: int
     name: str
     provider: str
+    api_format: str = "openai_chat_completions"
     base_url: str
     model_name: str
     api_key_masked: str

@@ -21,6 +21,11 @@ class LlmConfig(BigIntPrimaryKeyMixin, TimestampMixin, Base):
 
     name: Mapped[str] = mapped_column(String(80), nullable=False)
     provider: Mapped[str] = mapped_column(String(50), nullable=False)
+    api_format: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default=text("'openai_chat_completions'"),
+    )
     base_url: Mapped[str] = mapped_column(String(500), nullable=False)
     model_name: Mapped[str] = mapped_column(String(120), nullable=False)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
@@ -51,6 +56,7 @@ class LlmCallLog(BigIntPrimaryKeyMixin, Base):
         Index("idx_llm_call_logs_config_created", "llm_config_id", "created_at"),
         Index("idx_llm_call_logs_status_created", "status", "created_at"),
         Index("idx_llm_call_logs_provider_model", "provider", "model_name"),
+        Index("idx_llm_call_logs_record_created", "record_id", "created_at", "id"),
         {"comment": "LLM调用日志"},
     )
 

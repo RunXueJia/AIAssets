@@ -28,11 +28,15 @@ http.interceptors.response.use(
     return body
   },
   async (error) => {
-    if (error.response?.status === 401) {
+    const config = error.config || {}
+    const isRefreshRequest = config.url?.includes('/api/v1/auth/refresh_token')
+
+    if (error.response?.status === 401 && !config.__isRetryRequest && !isRefreshRequest) {
       const auth = useAuthStore()
       try {
         await auth.refreshAccessToken()
-        const config = error.config
+        config.__isRetryRequest = true
+        config.headers = config.headers || {}
         config.headers.Authorization = `Bearer ${auth.token}`
         return http(config)
       } catch {

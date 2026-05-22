@@ -42,6 +42,7 @@ class AmapService:
             destination_name=payload.destination_name,
             destination=payload.destination,
             transport_mode=payload.transport_mode,
+            waypoints=payload.waypoints,
         )
         return AmapRouteLinkResponse.model_validate(data).model_dump(mode="json")
 

@@ -39,6 +39,7 @@ class AmapClientProtocol(Protocol):
         destination_name: str,
         destination: str,
         transport_mode: str,
+        waypoints: list[str] | None = None,
     ) -> dict[str, Any]: ...
 
     async def export_route_map(
@@ -73,9 +74,11 @@ class AmapWebServiceClient:
         self.max_retries = max_retries
         self.cache = cache or TtlCache(ttl_s=300)
         self.place_endpoint = "https://restapi.amap.com/v3/place/text"
-        self.driving_endpoint = "https://restapi.amap.com/v3/direction/driving"
-        self.walking_endpoint = "https://restapi.amap.com/v3/direction/walking"
-        self.transit_endpoint = "https://restapi.amap.com/v3/direction/transit/integrated"
+        self.driving_endpoint = "https://restapi.amap.com/v5/direction/driving"
+        self.walking_endpoint = "https://restapi.amap.com/v5/direction/walking"
+        self.transit_endpoint = "https://restapi.amap.com/v5/direction/transit/integrated"
+        self.bicycling_endpoint = "https://restapi.amap.com/v5/direction/bicycling"
+        self.electrobike_endpoint = "https://restapi.amap.com/v5/direction/electrobike"
         self.static_map_endpoint = "https://restapi.amap.com/v3/staticmap"
 
     async def search_places(
@@ -105,7 +108,9 @@ class AmapWebServiceClient:
                     "type": str(poi.get("type") or ""),
                     "province_name": str(poi.get("pname") or ""),
                     "city_name": str(poi.get("cityname") or ""),
+                    "city_code": str(poi.get("citycode") or ""),
                     "adname": str(poi.get("adname") or ""),
+                    "adcode": str(poi.get("adcode") or ""),
                 }
                 for poi in pois
                 if isinstance(poi, dict)
@@ -136,6 +141,7 @@ class AmapWebServiceClient:
             "origin": origin_location,
             "destination": destination_location,
             "extensions": "base",
+            "show_fields": "cost",
         }
         endpoint = self.driving_endpoint
         cache_scope = "route-driving"
@@ -145,8 +151,18 @@ class AmapWebServiceClient:
         elif normalized_mode == "transit":
             endpoint = self.transit_endpoint
             cache_scope = "route-transit"
-            params["city"] = origin_place["city_name"] or self._city_code_or_name(origin)
-            params["cityd"] = destination_place["city_name"] or self._city_code_or_name(destination)
+            city1 = self._place_city_code_or_name(origin_place, origin)
+            city2 = self._place_city_code_or_name(destination_place, destination)
+            if city1:
+                params["city1"] = city1
+            if city2:
+                params["city2"] = city2
+        elif normalized_mode == "bicycling":
+            endpoint = self.bicycling_endpoint
+            cache_scope = "route-bicycling"
+        elif normalized_mode == "electrobike":
+            endpoint = self.electrobike_endpoint
+            cache_scope = "route-electrobike"
         elif waypoint_locations:
             params["waypoints"] = ";".join(waypoint_locations)
 
@@ -156,7 +172,9 @@ class AmapWebServiceClient:
             raise AmapClientError("高德路径规划未返回路线")
         path = self._first_path(route)
         distance_m = self._int_value(path.get("distance"))
-        duration_s = self._int_value(path.get("duration"))
+        duration_s = self._int_value(
+            path.get("duration") or self._nested_value(path, "cost", "duration")
+        )
         return {
             "distance_m": distance_m,
             "duration_s": duration_s,
@@ -173,6 +191,7 @@ class AmapWebServiceClient:
                 "origin_location": origin_location,
                 "destination_location": destination_location,
                 "transport_mode": transport_mode,
+                "route_mode": normalized_mode,
                 "waypoints": waypoint_locations,
                 "route": route,
             },
@@ -186,16 +205,28 @@ class AmapWebServiceClient:
         destination_name: str,
         destination: str,
         transport_mode: str,
+        waypoints: list[str] | None = None,
     ) -> dict[str, Any]:
-        params = urlencode(
-            {
-                "from": f"{origin},{origin_name}",
-                "to": f"{destination},{destination_name}",
-                "mode": self._normalize_transport_mode(transport_mode),
-            }
-        )
+        origin_place = await self._resolve_place(origin)
+        destination_place = await self._resolve_place(destination)
+        resolved_waypoints = [
+            await self._resolve_place(waypoint)
+            for waypoint in (waypoints or [])
+            if waypoint.strip()
+        ]
+        params: dict[str, str] = {
+            "from": self._uri_point(origin_place["location"], origin_name),
+            "to": self._uri_point(destination_place["location"], destination_name),
+            "mode": self._uri_transport_mode(transport_mode),
+            "src": "routecraft",
+        }
+        if params["mode"] == "car" and resolved_waypoints:
+            params["via"] = self._uri_point(
+                resolved_waypoints[0]["location"],
+                self._waypoint_name(waypoints or []),
+            )
         return {
-            "amap_route_url": f"https://uri.amap.com/navigation?{params}",
+            "amap_route_url": f"https://uri.amap.com/navigation?{urlencode(params)}",
             "mock": False,
             "provider": self.provider,
         }
@@ -243,7 +274,11 @@ class AmapWebServiceClient:
             "status": "completed",
             "image_url": image_url,
             "export_type": export_type,
-            "amap_route_url": self._route_uri(origin=origin, destination=destination),
+            "amap_route_url": self._route_uri(
+                origin=origin,
+                destination=destination,
+                waypoints=waypoints or [],
+            ),
             "width": self._size_part(size, 0),
             "height": self._size_part(size, 1),
             "mock": False,
@@ -295,14 +330,18 @@ class AmapWebServiceClient:
         paths = route.get("paths")
         if isinstance(paths, list) and paths and isinstance(paths[0], dict):
             return paths[0]
+        if isinstance(paths, dict):
+            return paths
         transits = route.get("transits")
         if isinstance(transits, list) and transits and isinstance(transits[0], dict):
             return transits[0]
+        if isinstance(transits, dict):
+            return transits
         raise AmapClientError("高德路径规划未返回可用方案")
 
     async def _resolve_place(self, value: str) -> dict[str, str]:
         if self._is_location(value):
-            return {"location": value, "city_name": ""}
+            return {"location": value, "city_name": "", "city_code": "", "adcode": ""}
         places = await self.search_places(keyword=value)
         for item in places.get("items") or []:
             if not isinstance(item, dict):
@@ -312,18 +351,36 @@ class AmapWebServiceClient:
                 return {
                     "location": location,
                     "city_name": str(item.get("city_name") or ""),
+                    "city_code": str(item.get("city_code") or ""),
+                    "adcode": str(item.get("adcode") or ""),
                 }
         raise AmapClientError(f"高德地点解析失败：{value}")
 
     def _normalize_transport_mode(self, transport_mode: str) -> str:
         if transport_mode in {"walking", "transit", "driving"}:
             return transport_mode
+        if transport_mode == "cycling":
+            return "bicycling"
+        if transport_mode == "motorcycle":
+            return "electrobike"
         if transport_mode == "mixed":
             return "transit"
         return "driving"
 
+    def _uri_transport_mode(self, transport_mode: str) -> str:
+        if transport_mode == "transit" or transport_mode == "mixed":
+            return "bus"
+        if transport_mode == "walking":
+            return "walk"
+        if transport_mode == "cycling" or transport_mode == "motorcycle":
+            return "ride"
+        return "car"
+
     def _city_code_or_name(self, location: str) -> str:
         return location if "," not in location else ""
+
+    def _place_city_code_or_name(self, place: dict[str, str], fallback: str) -> str:
+        return place.get("city_code") or place.get("city_name") or self._city_code_or_name(fallback)
 
     def _route_summary(self, distance_m: int, duration_s: int) -> str:
         distance_km = distance_m / 1000
@@ -340,6 +397,14 @@ class AmapWebServiceClient:
         if isinstance(value, list):
             return "".join(str(item) for item in value)
         return str(value or "")
+
+    def _nested_value(self, data: dict[str, Any], *keys: str) -> Any:
+        value: Any = data
+        for key in keys:
+            if not isinstance(value, dict):
+                return None
+            value = value.get(key)
+        return value
 
     def _is_location(self, value: str | None) -> bool:
         if not value or "," not in value:
@@ -363,10 +428,33 @@ class AmapWebServiceClient:
             lat_values.append(float(lat))
         return f"{sum(lng_values) / len(lng_values):.6f},{sum(lat_values) / len(lat_values):.6f}"
 
-    def _route_uri(self, *, origin: str | None, destination: str | None) -> str | None:
+    def _route_uri(
+        self,
+        *,
+        origin: str | None,
+        destination: str | None,
+        waypoints: list[str] | None = None,
+    ) -> str | None:
         if not origin or not destination:
             return None
-        return f"https://uri.amap.com/navigation?{urlencode({'from': origin, 'to': destination})}"
+        params = {"from": origin, "to": destination, "mode": "car", "src": "routecraft"}
+        first_waypoint = next(
+            (waypoint for waypoint in (waypoints or []) if self._is_location(waypoint)),
+            None,
+        )
+        if first_waypoint:
+            params["via"] = first_waypoint
+        return f"https://uri.amap.com/navigation?{urlencode(params)}"
+
+    def _uri_point(self, location: str, name: str | None = None) -> str:
+        normalized_name = (name or "").replace(",", " ").strip()
+        return f"{location},{normalized_name}" if normalized_name else location
+
+    def _waypoint_name(self, waypoints: list[str]) -> str | None:
+        if not waypoints:
+            return None
+        waypoint = waypoints[0].strip()
+        return None if self._is_location(waypoint) else waypoint
 
     def _size_part(self, size: str, index: int) -> int | None:
         parts = size.split("*", 1)

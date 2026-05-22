@@ -124,16 +124,29 @@ class AiPlanningService:
         record_id: int,
         request: GenerateStreamRequest,
     ) -> TripPlanningExternalContext:
-        weather_task = self._weather_context(request)
-        route_task = self._route_context(request)
-        attractions_task = self._attractions_context(request)
-        realtime_task = self._realtime_context(request)
-        weather, route, attractions, realtime = await asyncio.gather(
-            weather_task,
-            route_task,
-            attractions_task,
-            realtime_task,
+        realtime_task = asyncio.create_task(
+            self._safe_context(
+                self._realtime_context(request),
+                fallback=self._empty_realtime_context(),
+                provider="realtime",
+            )
         )
+        weather = await self._safe_context(
+            self._weather_context(request),
+            fallback=self._empty_weather_context(request),
+            provider="weather",
+        )
+        route = await self._safe_context(
+            self._route_context(request),
+            fallback=self._empty_route_context(request),
+            provider="amap",
+        )
+        attractions = await self._safe_context(
+            self._attractions_context(request),
+            fallback=self._empty_attractions_context(request),
+            provider="amap",
+        )
+        realtime = await realtime_task
         map_export = await self._map_export_context(
             record_id=record_id,
             request=request,
@@ -230,6 +243,24 @@ class AiPlanningService:
             realtime_summary=external.realtime.get("realtime_info_summary", "暂无实时信息摘要"),
         )
 
+    async def _safe_context(
+        self,
+        awaitable: Any,
+        *,
+        fallback: dict[str, Any],
+        provider: str,
+    ) -> dict[str, Any]:
+        try:
+            return await awaitable
+        except Exception as exc:
+            return {
+                **fallback,
+                "provider": provider,
+                "mock": False,
+                "fallback_reason": str(exc),
+                "source_updated_at": self._iso_now(),
+            }
+
     async def _weather_context(self, request: GenerateStreamRequest) -> dict[str, Any]:
         city = await self._weather_city_name(request)
         return await self.weather_service.query_weather(
@@ -254,30 +285,85 @@ class AiPlanningService:
         request: GenerateStreamRequest,
         route: dict[str, Any],
     ) -> dict[str, Any]:
-        link = await self.amap_service.create_route_link(
-            AmapRouteLinkRequest(
-                origin_name=request.origin,
-                origin=request.origin,
-                destination_name=request.destination,
-                destination=request.destination,
-                transport_mode=request.transport_mode,
+        origin_location = self._location_from_route(route, "origin")
+        destination_location = self._location_from_route(route, "destination")
+        waypoint_locations = self._locations_from_route_waypoints(route)
+        try:
+            link = await self.amap_service.create_route_link(
+                AmapRouteLinkRequest(
+                    origin_name=request.origin,
+                    origin=origin_location or request.origin,
+                    destination_name=request.destination,
+                    destination=destination_location or request.destination,
+                    transport_mode=request.transport_mode,
+                    waypoints=waypoint_locations,
+                )
             )
-        )
-        export = await self.amap_service.export_route_map(
-            AmapExportRouteMapRequest(
-                record_id=record_id,
-                export_type="static",
-                origin=self._location_from_route(route, "origin"),
-                destination=self._location_from_route(route, "destination"),
-                waypoints=self._locations_from_route_waypoints(route),
+        except Exception as exc:
+            link = {
+                "amap_route_url": None,
+                "provider": "amap",
+                "mock": False,
+                "fallback_reason": str(exc),
+            }
+        try:
+            export = await self.amap_service.export_route_map(
+                AmapExportRouteMapRequest(
+                    record_id=record_id,
+                    export_type="static",
+                    origin=origin_location,
+                    destination=destination_location,
+                    waypoints=waypoint_locations,
+                )
             )
-        )
-        return {
+        except Exception as exc:
+            export = {
+                **self._empty_map_export_context(),
+                "provider": "amap",
+                "mock": False,
+                "fallback_reason": str(exc),
+            }
+        fallback_reasons = [
+            item.get("fallback_reason")
+            for item in [route, link, export]
+            if item.get("fallback_reason")
+        ]
+        map_export = {
             **export,
             "amap_route_url": link.get("amap_route_url") or export.get("amap_route_url"),
             "route_snapshot_id": route.get("route_snapshot_id"),
             "source_updated_at": self._iso_now(),
         }
+        if fallback_reasons:
+            map_export["fallback_reason"] = "；".join(dict.fromkeys(fallback_reasons))
+        if map_export.get("amap_route_url") is None and origin_location and destination_location:
+            map_export["amap_route_url"] = self._fallback_amap_route_url(
+                origin=origin_location,
+                destination=destination_location,
+                transport_mode=request.transport_mode,
+            )
+        return map_export
+
+    def _fallback_amap_route_url(
+        self,
+        *,
+        origin: str,
+        destination: str,
+        transport_mode: str,
+    ) -> str:
+        from urllib.parse import urlencode
+
+        mode = {
+            "transit": "bus",
+            "mixed": "bus",
+            "walking": "walk",
+            "cycling": "ride",
+            "motorcycle": "ride",
+        }.get(transport_mode, "car")
+        return (
+            "https://uri.amap.com/navigation?"
+            f"{urlencode({'from': origin, 'to': destination, 'mode': mode, 'src': 'routecraft'})}"
+        )
 
     def _transport_context(
         self,
@@ -289,6 +375,8 @@ class AiPlanningService:
             summary = "公共交通与步行组合更稳妥，高峰时段建议提前出发。"
         elif request.transport_mode == "driving":
             summary = "驾车路线建议避开景区核心拥堵路段，预留停车时间。"
+        elif request.transport_mode == "motorcycle":
+            summary = "摩托车路线建议提前确认当地限行、禁摩路段和停车点。"
         else:
             summary = "按轻量步行节奏安排路线，必要时增加休息点。"
         return {
@@ -482,7 +570,11 @@ class AiPlanningService:
             risks.append("路线耗时较长，建议预留缓冲时间")
         if realtime.get("news_traffic"):
             risks.append("热门区域建议错峰进入")
-        if weather.get("fallback_reason") or realtime.get("fallback_reason"):
+        if (
+            weather.get("fallback_reason")
+            or route.get("fallback_reason")
+            or realtime.get("fallback_reason")
+        ):
             risks.append("部分外部数据已降级，需人工复核最新信息")
         return risks
 

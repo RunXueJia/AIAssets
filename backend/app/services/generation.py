@@ -34,6 +34,8 @@ class RecordStoreProtocol(Protocol):
 
     async def create_record(self, request: GenerateStreamRequest) -> Any: ...
 
+    async def use_existing_record(self, record_id: int, request: GenerateStreamRequest) -> Any: ...
+
     async def append_event(self, event: GenerationStreamEvent) -> None: ...
 
     async def save_snapshot(self, snapshot_type: str, data: dict[str, Any]) -> None: ...
@@ -98,6 +100,23 @@ class InMemoryGenerationRecordStore:
                 request=request,
             )
             self._records[record_id] = record
+            return record
+
+    async def use_existing_record(
+        self,
+        record_id: int,
+        request: GenerateStreamRequest,
+    ) -> MockGenerationRecord:
+        async with self._lock:
+            record = self._records.get(record_id)
+            if record is None:
+                record = MockGenerationRecord(
+                    id=record_id,
+                    record_no=f"PL{datetime.now(APP_TZ):%Y%m%d}{record_id:04d}",
+                    status="pending",
+                    request=request,
+                )
+                self._records[record_id] = record
             return record
 
     async def append_event(self, event: GenerationStreamEvent) -> None:
@@ -206,6 +225,22 @@ class DatabaseGenerationRecordStore:
             )
             await db.commit()
             self.record = record
+            return record
+
+    async def use_existing_record(
+        self,
+        record_id: int,
+        request: GenerateStreamRequest,
+    ) -> GenerationRecord:
+        self.input_payload = self._input_payload(request)
+        self.raw_input = request.model_dump(mode="json")
+        async with self.session_factory() as db:
+            record = await self.repo.get_record(db, record_id=record_id, user_id=self.user_id)
+            if record is None:
+                raise ValueError("记录不存在")
+            self.record = record
+            max_sequence_no = await self.repo.max_stream_sequence(db, record_id=record.id)
+            self.sequence_no = max_sequence_no
             return record
 
     async def append_event(self, event: GenerationStreamEvent) -> None:
@@ -349,21 +384,27 @@ class GenerationService:
     async def stream_generation(
         self,
         request: GenerateStreamRequest,
+        *,
+        existing_record_id: int | None = None,
     ) -> AsyncIterator[GenerationStreamEvent]:
         started_at = datetime.now(APP_TZ)
-        record = await self.record_store.create_record(request)
+        if existing_record_id is None:
+            record = await self.record_store.create_record(request)
+        else:
+            record = await self.record_store.use_existing_record(existing_record_id, request)
         current_stage: str | None = None
 
-        record_created = GenerationStreamEvent(
-            event="record_created",
-            data={
-                "record_id": record.id,
-                "record_no": record.record_no,
-                "status": "pending",
-            },
-        )
-        await self.record_store.append_event(record_created)
-        yield record_created
+        if existing_record_id is None:
+            record_created = GenerationStreamEvent(
+                event="record_created",
+                data={
+                    "record_id": record.id,
+                    "record_no": record.record_no,
+                    "status": "pending",
+                },
+            )
+            await self.record_store.append_event(record_created)
+            yield record_created
 
         try:
             llm_client = await self._get_llm_client()
@@ -446,7 +487,10 @@ class GenerationService:
                 stage=current_stage,
                 error_code="GENERATION_FAILED",
                 error_message=error_message,
-                error_detail={"exception": exc.__class__.__name__},
+                error_detail={
+                    "exception": exc.__class__.__name__,
+                    "message": str(exc),
+                },
             )
             error_event = GenerationStreamEvent(
                 event="error",

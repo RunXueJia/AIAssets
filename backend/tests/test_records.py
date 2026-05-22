@@ -40,8 +40,10 @@ def test_record_routers_expose_integration_contract_paths() -> None:
 
     assert "/planning/records" in planning_paths
     assert "/planning/records/{record_id}" in planning_paths
+    assert "/planning/records/{record_id}/stream" in planning_paths
     assert "/planning/records/{record_id}/route_map" in planning_paths
     assert "/planning/records/{record_id}/regenerate" in planning_paths
+    assert "/planning/records/{record_id}/retry" in planning_paths
     assert "/admin/generation_records" in admin_paths
     assert "/admin/generation_records/{record_id}" in admin_paths
     assert "/admin/generation_records/{record_id}/retry" in admin_paths
@@ -192,7 +194,7 @@ def test_regenerate_record_copies_parent_input_and_applies_overrides() -> None:
         "record_id": 102,
         "parent_record_id": 101,
         "status": "pending",
-        "stream_url": "/api/v1/planning/generate_stream",
+        "stream_url": "/api/v1/planning/records/102/stream",
         "request_payload": {
             "origin": "杭州东站",
             "destination": "西湖景区",
@@ -205,3 +207,109 @@ def test_regenerate_record_copies_parent_input_and_applies_overrides() -> None:
         },
     }
     db.commit.assert_awaited_once()
+
+
+def test_list_stream_events_returns_resume_payload() -> None:
+    record = make_record(status="streaming")
+    event = SimpleNamespace(
+        id=1,
+        sequence_no=2,
+        event_type="token",
+        stage="route",
+        content="路线内容",
+        payload={"record_id": 101, "stage": "route", "content": "路线内容"},
+        created_at=datetime(2026, 5, 21, 10, 0, 1),
+    )
+    repo = SimpleNamespace(
+        get_record=AsyncMock(return_value=record),
+        list_stream_events_after=AsyncMock(return_value=[event]),
+    )
+    service = RecordsService(repo=repo)
+
+    data = asyncio.run(
+        service.list_stream_events(
+            db=SimpleNamespace(),
+            user_id=12,
+            record_id=101,
+            after_sequence=1,
+        )
+    )
+
+    assert data == [
+        {
+            "id": 1,
+            "sequence_no": 2,
+            "event": "token",
+            "stage": "route",
+            "content": "路线内容",
+            "data": {"record_id": 101, "stage": "route", "content": "路线内容"},
+            "created_at": "2026-05-21T10:00:01",
+        }
+    ]
+    repo.list_stream_events_after.assert_awaited_once()
+
+
+def test_retry_planning_record_requires_failed_status() -> None:
+    repo = SimpleNamespace(get_record=AsyncMock(return_value=make_record(status="completed")))
+    service = RecordsService(repo=repo)
+
+    with pytest.raises(AppException) as exc_info:
+        asyncio.run(
+            service.retry_planning_record(
+                db=SimpleNamespace(),
+                user_id=12,
+                record_id=101,
+            )
+        )
+
+    assert exc_info.value.code == 409
+
+
+def test_retry_planning_record_copies_failed_input() -> None:
+    parent_record = make_record(status="failed")
+    parent_input = SimpleNamespace(
+        origin_text="巢湖",
+        destination_text="拉萨",
+        range_text="30天",
+        transport_mode="motorcycle",
+        travel_date=date(2026, 5, 31),
+        date_text=None,
+        people_count=1,
+        preferences=["自然风光"],
+        avoidances=[],
+        raw_input={"origin": "巢湖", "destination": "拉萨", "range": "30天"},
+    )
+    db = SimpleNamespace(commit=AsyncMock(), rollback=AsyncMock())
+
+    async def create_regeneration_record(
+        _db,
+        *,
+        parent_record,
+        record_no,
+        input_payload,
+        raw_input,
+    ):
+        assert parent_record.id == 101
+        assert input_payload["transport_mode"] == "motorcycle"
+        assert raw_input["origin"] == "巢湖"
+        return make_record(id=103, status="pending", parent_record_id=101)
+
+    repo = SimpleNamespace(
+        get_record=AsyncMock(return_value=parent_record),
+        get_record_input=AsyncMock(return_value=parent_input),
+        create_regeneration_record=create_regeneration_record,
+    )
+    service = RecordsService(repo=repo)
+
+    data = asyncio.run(
+        service.retry_planning_record(
+            db=db,
+            user_id=12,
+            record_id=101,
+        )
+    )
+
+    assert data["record_id"] == 103
+    assert data["parent_record_id"] == 101
+    assert data["stream_url"] == "/api/v1/planning/records/103/stream"
+    assert data["request_payload"]["transport_mode"] == "motorcycle"

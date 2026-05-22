@@ -1,295 +1,350 @@
 <template>
   <div class="planning-page">
-    <!-- Input Panel - Step Wizard -->
-    <aside class="input-panel">
-      <!-- Step Indicator -->
-      <div class="step-indicator">
-        <button
-          v-for="(s, i) in stepDefs"
-          :key="s.key"
-          class="step-dot-nav"
-          :class="{ done: i < currentStep, active: i === currentStep }"
-          :disabled="i > currentStep"
-          @click="i < currentStep && goToStep(i)"
-        >
-          <span class="dot-circle">{{ i < currentStep ? '✓' : i + 1 }}</span>
-          <span class="dot-label">{{ s.label }}</span>
-        </button>
+    <section class="planning-hero">
+      <div class="hero-copy">
+        <h1>今天想去哪儿？</h1>
+        <p>填几个关键信息，生成一份可执行的出行规划。</p>
       </div>
+      <div class="hero-rail" aria-label="规划能力">
+        <span><el-icon><Cloudy /></el-icon>天气</span>
+        <span><el-icon><MapLocation /></el-icon>路线</span>
+      </div>
+    </section>
 
-      <!-- Step Content -->
-      <div class="step-body" :key="currentStep">
-        <transition name="step-fade" mode="out-in">
-          <!-- Step 0: Where -->
-          <div v-if="currentStep === 0" key="where" class="step-content">
-            <div class="step-emoji">📍</div>
-            <h3 class="step-title">去哪儿？</h3>
-            <p class="step-desc">告诉我们起点和目的地</p>
-            <div class="step-form">
-              <div class="input-group">
-                <label class="input-label">起点</label>
-                <el-input
-                  v-model="form.origin"
-                  placeholder="城市、地址或地标"
-                  maxlength="100"
-                  size="large"
-                  :class="{ error: errors.origin }"
-                  @input="errors.origin = ''"
-                />
-                <span v-if="errors.origin" class="field-error">{{ errors.origin }}</span>
+    <div class="planning-workspace" :class="{ 'has-output': shouldShowOutputPanel }">
+      <!-- Input Panel - Step Wizard -->
+      <aside v-if="!shouldShowOutputPanel" class="input-panel">
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+          <button
+            v-for="(s, i) in stepDefs"
+            :key="s.key"
+            class="step-dot-nav"
+            :class="{ done: i < currentStep, active: i === currentStep }"
+            :disabled="i > currentStep"
+            @click="i < currentStep && goToStep(i)"
+          >
+            <span class="dot-circle">
+              <el-icon v-if="i < currentStep"><Check /></el-icon>
+              <span v-else>{{ i + 1 }}</span>
+            </span>
+            <span class="dot-label">{{ s.label }}</span>
+          </button>
+        </div>
+
+        <!-- Step Content -->
+        <div class="step-body" :key="currentStep">
+          <transition name="step-fade" mode="out-in">
+            <!-- Step 0: Where -->
+            <div v-if="currentStep === 0" key="where" class="step-content">
+              <div class="step-mark">
+                <el-icon><Location /></el-icon>
               </div>
-              <div class="input-group">
-                <label class="input-label">目的地</label>
-                <el-input
-                  v-model="form.destination"
-                  placeholder="想去哪里？"
-                  maxlength="100"
-                  size="large"
-                  :class="{ error: errors.destination }"
-                  @input="errors.destination = ''"
-                />
-                <span v-if="errors.destination" class="field-error">{{ errors.destination }}</span>
-              </div>
-              <div class="input-group">
-                <label class="input-label">范围</label>
-                <el-input
-                  v-model="form.range"
-                  placeholder="例如：一天、步行少一点"
-                  maxlength="200"
-                  size="large"
-                  :class="{ error: errors.range }"
-                  @input="errors.range = ''"
-                />
-                <span v-if="errors.range" class="field-error">{{ errors.range }}</span>
+              <h3 class="step-title">去哪儿？</h3>
+              <p class="step-desc">输入起点、目的地和这次出行的范围。</p>
+              <div class="step-form">
+                <div class="input-group">
+                  <label class="input-label">起点</label>
+                  <el-input
+                    v-model="form.origin"
+                    placeholder="城市、地址或地标"
+                    maxlength="100"
+                    size="large"
+                    :class="{ error: errors.origin }"
+                    @input="errors.origin = ''"
+                  />
+                  <span v-if="errors.origin" class="field-error">{{ errors.origin }}</span>
+                </div>
+                <div class="input-group">
+                  <label class="input-label">目的地</label>
+                  <el-input
+                    v-model="form.destination"
+                    placeholder="想去哪里？"
+                    maxlength="100"
+                    size="large"
+                    :class="{ error: errors.destination }"
+                    @input="errors.destination = ''"
+                  />
+                  <span v-if="errors.destination" class="field-error">{{ errors.destination }}</span>
+                </div>
+                <div class="input-group">
+                  <label class="input-label">范围</label>
+                  <el-input
+                    v-model="form.range"
+                    placeholder="例如：一天、步行少一点"
+                    maxlength="200"
+                    size="large"
+                    :class="{ error: errors.range }"
+                    @input="errors.range = ''"
+                  />
+                  <span v-if="errors.range" class="field-error">{{ errors.range }}</span>
+                </div>
               </div>
             </div>
-          </div>
 
-          <!-- Step 1: Transport -->
-          <div v-else-if="currentStep === 1" key="how" class="step-content">
-            <div class="step-emoji">🚗</div>
-            <h3 class="step-title">怎么去？</h3>
-            <p class="step-desc">选择出行方式</p>
-            <div class="transport-grid">
+            <!-- Step 1: Transport -->
+            <div v-else-if="currentStep === 1" key="how" class="step-content">
+              <div class="step-mark">
+                <el-icon><Van /></el-icon>
+              </div>
+              <h3 class="step-title">怎么去？</h3>
+              <p class="step-desc">选择适合这次计划的主要交通方式。</p>
+              <div class="transport-grid">
+                <button
+                  v-for="opt in transportOptions"
+                  :key="opt.value"
+                  type="button"
+                  class="transport-option"
+                  :class="{ active: form.transport_mode === opt.value }"
+                  @click="form.transport_mode = opt.value"
+                >
+                  <component :is="opt.icon" class="t-icon" />
+                  <span class="t-copy">
+                    <span class="t-label">{{ opt.label }}</span>
+                    <span class="t-desc">{{ opt.desc }}</span>
+                  </span>
+                  <span class="option-check"><el-icon><Check /></el-icon></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Step 2: When & People -->
+            <div v-else-if="currentStep === 2" key="when" class="step-content">
+              <div class="step-mark">
+                <el-icon><Calendar /></el-icon>
+              </div>
+              <h3 class="step-title">什么时候？</h3>
+              <p class="step-desc">日期和人数会影响节奏、排队和餐饮建议。</p>
+              <div class="step-form">
+                <div class="input-group">
+                  <label class="input-label">出行日期</label>
+                  <el-date-picker
+                    v-model="form.travel_date"
+                    type="date"
+                    placeholder="选填"
+                    value-format="YYYY-MM-DD"
+                    style="width: 100%"
+                    size="large"
+                  />
+                </div>
+                <div class="input-group">
+                  <label class="input-label">人数</label>
+                  <div class="people-picker">
+                    <button type="button" class="people-btn" @click="form.people_count > 1 && form.people_count--">
+                      <el-icon><Minus /></el-icon>
+                    </button>
+                    <span class="people-num">{{ form.people_count }}</span>
+                    <button type="button" class="people-btn" @click="form.people_count < 20 && form.people_count++">
+                      <el-icon><Plus /></el-icon>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 3: Preferences -->
+            <div v-else-if="currentStep === 3" key="pref" class="step-content">
+              <div class="step-mark">
+                <el-icon><Star /></el-icon>
+              </div>
+              <h3 class="step-title">偏好与避开</h3>
+              <p class="step-desc">让计划更贴近你的出行习惯。</p>
+              <div class="step-form">
+                <div class="input-group">
+                  <label class="input-label">偏好</label>
+                  <div class="tag-grid">
+                    <button
+                      v-for="p in preferenceOptions"
+                      :key="p"
+                      type="button"
+                      class="tag-item"
+                      :class="{ active: form.preferences.includes(p) }"
+                      @click="togglePreference(p)"
+                    >{{ p }}</button>
+                  </div>
+                </div>
+                <div class="input-group">
+                  <label class="input-label">避开</label>
+                  <div class="tag-grid">
+                    <button
+                      v-for="a in avoidanceOptions"
+                      :key="a"
+                      type="button"
+                      class="tag-item avoid-tag"
+                      :class="{ active: form.avoidances.includes(a) }"
+                      @click="toggleAvoidance(a)"
+                    >{{ a }}</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Step 4: Confirm -->
+            <div v-else-if="currentStep === 4" key="confirm" class="step-content">
+              <div class="step-mark">
+                <el-icon><CircleCheck /></el-icon>
+              </div>
+              <h3 class="step-title">确认信息</h3>
+              <p class="step-desc">生成前再看一眼关键条件。</p>
+              <div class="confirm-cards">
+                <div class="confirm-item">
+                  <span class="ci-label"><el-icon><Location /></el-icon> 去哪儿</span>
+                  <span class="ci-val">{{ form.origin }} → {{ form.destination }}</span>
+                  <span class="ci-sub">{{ form.range }}</span>
+                </div>
+                <div class="confirm-item">
+                  <span class="ci-label"><el-icon><Guide /></el-icon> 怎么去</span>
+                  <span class="ci-val">{{ transportOptions.find(o => o.value === form.transport_mode)?.label }}</span>
+                </div>
+                <div class="confirm-item" v-if="form.travel_date || form.people_count > 1">
+                  <span class="ci-label"><el-icon><Calendar /></el-icon> 出行信息</span>
+                  <span class="ci-val">
+                    {{ form.travel_date ? form.travel_date + ' · ' : '' }}{{ form.people_count }}人
+                  </span>
+                </div>
+                <div class="confirm-item" v-if="form.preferences.length">
+                  <span class="ci-label"><el-icon><Star /></el-icon> 偏好</span>
+                  <span class="ci-val">{{ form.preferences.join('、') }}</span>
+                </div>
+                <div class="confirm-item" v-if="form.avoidances.length">
+                  <span class="ci-label"><el-icon><CircleClose /></el-icon> 避开</span>
+                  <span class="ci-val">{{ form.avoidances.join('、') }}</span>
+                </div>
+              </div>
+
+              <div v-if="outputState?.status === 'failed' && streamErrorMessage" class="confirm-error">
+                <el-icon><Warning /></el-icon>
+                <span>{{ streamErrorMessage }}</span>
+              </div>
+
               <button
-                v-for="opt in transportOptions"
-                :key="opt.value"
                 type="button"
-                class="transport-card"
-                :class="{ active: form.transport_mode === opt.value }"
-                @click="form.transport_mode = opt.value"
+                class="generate-btn"
+                :class="{ loading: streaming }"
+                :disabled="streaming"
+                @click="handleGenerate"
               >
-                <component :is="opt.icon" class="t-icon" />
-                <span class="t-label">{{ opt.label }}</span>
-                <span class="t-desc">{{ opt.desc }}</span>
+                <span v-if="streaming">
+                  <span class="dot-pulse"></span>生成中...
+                </span>
+                <span v-else>开始生成</span>
               </button>
             </div>
-          </div>
+          </transition>
+        </div>
 
-          <!-- Step 2: When & People -->
-          <div v-else-if="currentStep === 2" key="when" class="step-content">
-            <div class="step-emoji">📅</div>
-            <h3 class="step-title">什么时候？</h3>
-            <p class="step-desc">选填，不填也可以生成</p>
-            <div class="step-form">
-              <div class="input-group">
-                <label class="input-label">出行日期</label>
-                <el-date-picker
-                  v-model="form.travel_date"
-                  type="date"
-                  placeholder="选填"
-                  value-format="YYYY-MM-DD"
-                  style="width: 100%"
-                  size="large"
-                />
-              </div>
-              <div class="input-group">
-                <label class="input-label">人数</label>
-                <div class="people-picker">
-                  <button class="people-btn" @click="form.people_count > 1 && form.people_count--">−</button>
-                  <span class="people-num">{{ form.people_count }}</span>
-                  <button class="people-btn" @click="form.people_count < 20 && form.people_count++">+</button>
-                </div>
-              </div>
-            </div>
-          </div>
+        <!-- Step Nav Buttons -->
+        <div class="step-nav" v-if="currentStep < 4">
+          <button
+            v-if="currentStep > 0"
+            class="nav-btn back"
+            @click="goToStep(currentStep - 1)"
+          >
+            上一步
+          </button>
+          <div v-else class="nav-spacer"></div>
+          <button class="nav-btn next" @click="handleNext">
+            {{ currentStep === 3 ? '确认信息' : '下一步' }}
+            <el-icon><ArrowRight /></el-icon>
+          </button>
+        </div>
+      </aside>
 
-          <!-- Step 3: Preferences -->
-          <div v-else-if="currentStep === 3" key="pref" class="step-content">
-            <div class="step-emoji">🎯</div>
-            <h3 class="step-title">偏好与避开</h3>
-            <p class="step-desc">告诉我们你的喜好</p>
-            <div class="step-form">
-              <div class="input-group">
-                <label class="input-label">偏好</label>
-                <div class="tag-grid">
-                  <span
-                    v-for="p in preferenceOptions"
-                    :key="p"
-                    class="tag-item"
-                    :class="{ active: form.preferences.includes(p) }"
-                    @click="togglePreference(p)"
-                  >{{ p }}</span>
-                </div>
-              </div>
-              <div class="input-group">
-                <label class="input-label">避开</label>
-                <div class="tag-grid">
-                  <span
-                    v-for="a in avoidanceOptions"
-                    :key="a"
-                    class="tag-item avoid-tag"
-                    :class="{ active: form.avoidances.includes(a) }"
-                    @click="toggleAvoidance(a)"
-                  >{{ a }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Step 4: Confirm -->
-          <div v-else-if="currentStep === 4" key="confirm" class="step-content">
-            <div class="step-emoji">✨</div>
-            <h3 class="step-title">确认信息</h3>
-            <p class="step-desc">确认无误后开始生成</p>
-            <div class="confirm-cards">
-              <div class="confirm-item">
-                <span class="ci-label">📍 去哪儿</span>
-                <span class="ci-val">{{ form.origin }} → {{ form.destination }}</span>
-                <span class="ci-sub">{{ form.range }}</span>
-              </div>
-              <div class="confirm-item">
-                <span class="ci-label">🚗 怎么去</span>
-                <span class="ci-val">{{ transportOptions.find(o => o.value === form.transport_mode)?.label }}</span>
-              </div>
-              <div class="confirm-item" v-if="form.travel_date || form.people_count > 1">
-                <span class="ci-label">📅 出行信息</span>
-                <span class="ci-val">
-                  {{ form.travel_date ? form.travel_date + ' · ' : '' }}{{ form.people_count }}人
-                </span>
-              </div>
-              <div class="confirm-item" v-if="form.preferences.length">
-                <span class="ci-label">🎯 偏好</span>
-                <span class="ci-val">{{ form.preferences.join('、') }}</span>
-              </div>
-              <div class="confirm-item" v-if="form.avoidances.length">
-                <span class="ci-label">避开</span>
-                <span class="ci-val">{{ form.avoidances.join('、') }}</span>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              class="generate-btn"
-              :class="{ loading: streaming }"
-              :disabled="streaming"
-              @click="handleGenerate"
-            >
-              <span v-if="streaming">
-                <span class="dot-pulse"></span>生成中...
-              </span>
-              <span v-else>✨ 开始生成</span>
-            </button>
-          </div>
-        </transition>
-      </div>
-
-      <!-- Step Nav Buttons -->
-      <div class="step-nav" v-if="currentStep < 4">
-        <button
-          v-if="currentStep > 0"
-          class="nav-btn back"
-          @click="goToStep(currentStep - 1)"
-        >
-          ← 上一步
-        </button>
-        <div v-else class="nav-spacer"></div>
-        <button class="nav-btn next" @click="handleNext">
-          {{ currentStep === 3 ? '确认信息' : '下一步' }} →
-        </button>
-      </div>
-    </aside>
-
-    <!-- Output Panel - unchanged -->
-    <section class="output-panel" ref="outputPanel">
-      <template v-if="streaming || outputState">
+      <!-- Output Panel -->
+      <section v-if="shouldShowOutputPanel" class="output-panel" ref="outputPanel">
         <div class="stream-status-bar">
           <div class="status-left">
             <span class="status-dot" :class="streaming ? 'streaming' : outputState?.status"></span>
-            <span class="status-text">{{ statusLabel }}</span>
+            <span class="status-text">{{ statusLabel || '规划输出' }}</span>
             <span v-if="currentStageName" class="stage-badge">{{ currentStageName }}</span>
             <span v-if="duration" class="duration">{{ duration }}</span>
           </div>
           <div class="status-right">
             <button v-if="streaming" class="action-btn stop" @click="handleCancel">停止生成</button>
-            <button v-if="!streaming && outputState?.status === 'completed'" class="action-btn copy" @click="copyResult">复制结果</button>
+            <button v-if="!streaming && outputState?.status === 'completed'" class="action-btn copy" @click="copyResult">
+              <el-icon><CopyDocument /></el-icon>复制结果
+            </button>
           </div>
         </div>
-        <div class="stage-steps" v-if="stages.length">
-          <div v-for="s in stages" :key="s.key" class="step-item" :class="{ active: s.active, done: s.done }">
-            <span class="step-dot"></span>
-            <span class="step-label">{{ s.label }}</span>
-          </div>
-        </div>
-        <div class="stream-content" ref="streamContent">
-          <div v-if="streamErrorMessage" class="content-card error-card">
-            <div class="card-label">生成失败</div>
-            <p>{{ streamErrorMessage }}</p>
-          </div>
-          <div v-if="weatherSummary" class="content-card weather-card">
-            <div class="card-label">☁️ 天气预警</div>
-            <p>{{ weatherSummary }}</p>
-            <div v-if="weatherMeta" class="source-meta">{{ weatherMeta }}</div>
-          </div>
-          <div v-if="routeSummary" class="content-card route-card">
-            <div class="card-label">🗺 路线建议</div>
-            <p>{{ routeSummary }}</p>
-          </div>
-          <div v-if="transportSummary" class="content-card transport-card">
-            <div class="card-label">🚇 交通建议</div>
-            <p>{{ transportSummary }}</p>
-          </div>
-          <div v-if="amapUrl || routeMapImage" class="content-card map-card">
-            <div class="card-label">📍 高德路线图</div>
-            <img v-if="routeMapImage" :src="routeMapImage" class="route-map-img" alt="路线图" />
-            <div v-if="mapMeta" class="source-meta">{{ mapMeta }}</div>
-            <div class="map-actions">
-              <a v-if="amapUrl" :href="amapUrl" target="_blank" class="amap-link">打开高德路线 →</a>
-              <button v-if="routeMapImage" class="download-btn" @click.stop="downloadRouteMap">💾 保存路线图</button>
+
+        <template v-if="streaming || outputState">
+          <div class="stage-steps" v-if="stages.length">
+            <div v-for="s in stages" :key="s.key" class="step-item" :class="{ active: s.active, done: s.done }">
+              <span class="step-dot"></span>
+              <span class="step-label">{{ s.label }}</span>
             </div>
           </div>
-          <div v-if="attractionsSummary" class="content-card attr-card">
-            <div class="card-label">🏞 途径景点</div>
-            <p>{{ attractionsSummary }}</p>
+
+          <div class="stream-content" ref="streamContent" @scroll.passive="handleStreamScroll">
+            <div v-if="streamErrorMessage" class="content-card error-card">
+              <div class="card-label"><el-icon><Warning /></el-icon>生成失败</div>
+              <p>{{ streamErrorMessage }}</p>
+            </div>
+            <div v-if="weatherSummary" class="content-card weather-card">
+              <div class="card-label"><el-icon><Cloudy /></el-icon>天气预警</div>
+              <p>{{ weatherSummary }}</p>
+              <div v-if="weatherMeta" class="source-meta">{{ weatherMeta }}</div>
+            </div>
+            <div v-if="routeSummary" class="content-card route-card">
+              <div class="card-label"><el-icon><MapLocation /></el-icon>路线建议</div>
+              <p>{{ routeSummary }}</p>
+            </div>
+            <div v-if="transportSummary" class="content-card transport-card">
+              <div class="card-label"><el-icon><Guide /></el-icon>交通建议</div>
+              <p>{{ transportSummary }}</p>
+            </div>
+            <div v-if="amapUrl || routeMapImage" class="content-card map-card">
+              <div class="card-label"><el-icon><Location /></el-icon>高德路线图</div>
+              <img
+                v-if="routeMapImage"
+                :src="routeMapImage"
+                class="route-map-img"
+                alt="路线图"
+                @load="scrollOutputToBottom"
+              />
+              <div v-if="mapMeta" class="source-meta">{{ mapMeta }}</div>
+              <div class="map-actions">
+                <a v-if="amapUrl" :href="amapUrl" target="_blank" class="amap-link">打开高德路线</a>
+                <button v-if="routeMapImage" class="download-btn" @click.stop="downloadRouteMap">
+                  <el-icon><Download /></el-icon>保存路线图
+                </button>
+              </div>
+            </div>
+            <div v-if="attractionsSummary" class="content-card attr-card">
+              <div class="card-label"><el-icon><Place /></el-icon>途径景点</div>
+              <p>{{ attractionsSummary }}</p>
+            </div>
+            <div v-if="realtimeSummary" class="content-card realtime-card">
+              <div class="card-label"><el-icon><DataLine /></el-icon>实时信息</div>
+              <p>{{ realtimeSummary }}</p>
+              <div v-if="realtimeMeta" class="source-meta">{{ realtimeMeta }}</div>
+            </div>
+            <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
+            <div v-if="finalMarkdown" class="final-markdown" v-html="renderedMarkdown"></div>
+            <span v-if="streaming" class="cursor-blink">|</span>
           </div>
-          <div v-if="realtimeSummary" class="content-card realtime-card">
-            <div class="card-label">📡 实时信息</div>
-            <p>{{ realtimeSummary }}</p>
-            <div v-if="realtimeMeta" class="source-meta">{{ realtimeMeta }}</div>
+        </template>
+        <div v-else class="output-empty">
+          <div class="empty-visual">
+            <el-icon><Compass /></el-icon>
           </div>
-          <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
-          <div v-if="finalMarkdown" class="final-markdown" v-html="renderedMarkdown"></div>
-          <span v-if="streaming" class="cursor-blink">|</span>
+          <p class="empty-title">你的规划会在这里展开</p>
+          <p class="empty-desc">从天气、路线、交通、景点到实时信息，生成过程会按阶段呈现。</p>
+          <div class="empty-features">
+            <span class="feat-item"><el-icon><Cloudy /></el-icon>天气预警</span>
+            <span class="feat-item"><el-icon><MapLocation /></el-icon>路线规划</span>
+            <span class="feat-item"><el-icon><Place /></el-icon>景点推荐</span>
+            <span class="feat-item"><el-icon><DataLine /></el-icon>实时资讯</span>
+          </div>
         </div>
-      </template>
-      <div v-else class="output-empty">
-        <div class="empty-illustration">🗺</div>
-        <p class="empty-title">准备好出发了吗？</p>
-        <p class="empty-desc">填写信息后，AI 将分析天气、路线、景点和实时信息，为你定制出行计划</p>
-        <div class="empty-features">
-          <span class="feat-item">☁️ 天气预警</span>
-          <span class="feat-item">🗺 路线规划</span>
-          <span class="feat-item">🏞 景点推荐</span>
-          <span class="feat-item">📡 实时资讯</span>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
 
     <!-- Recent history records below output -->
     <div v-if="recentRecords.length && !streaming" class="recent-records">
       <div class="recent-header">
         <h4>最近的规划记录</h4>
-        <button class="view-all-link" @click="$router.push('/history')">查看全部 →</button>
+        <button class="view-all-link" @click="$router.push('/history')">查看全部</button>
       </div>
       <div class="recent-grid">
         <div
@@ -317,7 +372,30 @@
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Van, Guide, User, Bicycle, Connection } from '@element-plus/icons-vue'
+import {
+  ArrowRight,
+  Bicycle,
+  Calendar,
+  Check,
+  CircleCheck,
+  CircleClose,
+  Cloudy,
+  Compass,
+  Connection,
+  CopyDocument,
+  DataLine,
+  Download,
+  Guide,
+  Location,
+  MapLocation,
+  Minus,
+  Place,
+  Plus,
+  Star,
+  User,
+  Van,
+  Warning,
+} from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { planningApi } from '@/api/planning'
 import { createStreamClient } from '@/utils/stream'
@@ -326,7 +404,11 @@ import { marked } from 'marked'
 import dayjs from 'dayjs'
 
 const auth = useAuthStore()
+const outputPanel = ref(null)
 const streamContent = ref(null)
+const autoScrollOutput = ref(true)
+const outputBottomThreshold = 48
+let scrollFrameId = 0
 
 // Wizard state
 const currentStep = ref(0)
@@ -356,6 +438,7 @@ const transportOptions = [
   { value: 'transit', label: '公交', desc: '地铁公交', icon: Guide },
   { value: 'walking', label: '步行', desc: '慢行探索', icon: User },
   { value: 'cycling', label: '骑行', desc: '健康环保', icon: Bicycle },
+  { value: 'motorcycle', label: '摩托车', desc: '两轮出行', icon: Compass },
   { value: 'mixed', label: '混合', desc: '智能搭配', icon: Connection },
 ]
 
@@ -363,7 +446,7 @@ const preferenceOptions = ['自然风光', '人文历史', '亲子友好', '美�
 const avoidanceOptions = ['不走高速', '少换乘', '少步行', '避开热门', '避开收费']
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
-const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
 function getStatusLabel(s) { return statusMap[s] || s }
 function getTransportLabel(t) { return transportMap[t] || t }
 
@@ -461,6 +544,7 @@ const renderedMarkdown = computed(() => finalMarkdown.value ? marked.parse(final
 const weatherMeta = computed(() => formatSourceMeta(weatherSource.value))
 const mapMeta = computed(() => formatSourceMeta(mapSource.value))
 const realtimeMeta = computed(() => formatSourceMeta(realtimeSource.value))
+const shouldShowOutputPanel = computed(() => streaming.value || outputState.value?.status === 'completed')
 
 let streamClient = null
 
@@ -497,6 +581,7 @@ async function handleGenerate() {
 
   resetOutput()
   streaming.value = true
+  scrollOutputToBottom(true)
 
   const body = {
     origin: form.origin,
@@ -519,8 +604,12 @@ async function handleGenerate() {
         currentStage.value = data.stage
         currentStageName.value = data.stage_name
         setStageActive(data.stage)
+        scrollOutputToBottom()
       },
-      onToken(data) { streamTokens.value += data.content; autoScroll() },
+      onToken(data) {
+        streamTokens.value += data.content
+        scrollOutputToBottom()
+      },
       onSnapshot(data) {
         if (data.type === 'weather') {
           weatherSummary.value = data.data?.weather_summary || data.data?.summary || ''
@@ -539,6 +628,7 @@ async function handleGenerate() {
           realtimeSource.value = buildSourceMeta(data.data)
         }
         else if (data.type === 'summary') finalMarkdown.value = data.data?.final_markdown || ''
+        scrollOutputToBottom()
       },
       onDone(data) {
         streaming.value = false
@@ -553,6 +643,7 @@ async function handleGenerate() {
         }
         if (data.record_id) loadRecordDetail(data.record_id)
         fetchRecentRecords()
+        scrollOutputToBottom()
       },
       onError(data) {
         failGeneration(data.message || '生成失败', data)
@@ -602,6 +693,7 @@ async function loadRecordDetail(id) {
       ...(realtimeSnapshots.guide_pitfall || []),
     ]
     if (realtimeItems.length) realtimeSource.value = buildSourceMeta(realtimeItems[0])
+    scrollOutputToBottom()
   } catch { /* non-critical */ }
 }
 
@@ -631,14 +723,32 @@ function resetOutput() {
   duration.value = ''
   recordId.value = null
   outputState.value = null
+  autoScrollOutput.value = true
   stages.forEach(s => { s.active = false; s.done = false })
 }
 
-function autoScroll() {
+function isOutputAtBottom() {
+  const el = streamContent.value
+  if (!el) return true
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= outputBottomThreshold
+}
+
+function handleStreamScroll() {
+  autoScrollOutput.value = isOutputAtBottom()
+}
+
+function scrollOutputToBottom(force = false) {
   nextTick(() => {
-    if (streamContent.value) {
-      streamContent.value.scrollTop = streamContent.value.scrollHeight
-    }
+    if (scrollFrameId) cancelAnimationFrame(scrollFrameId)
+    scrollFrameId = requestAnimationFrame(() => {
+      scrollFrameId = 0
+      const el = streamContent.value
+      if (!el) return
+      if (force || autoScrollOutput.value || isOutputAtBottom()) {
+        el.scrollTop = el.scrollHeight
+        autoScrollOutput.value = true
+      }
+    })
   })
 }
 
@@ -682,22 +792,116 @@ onMounted(async () => {
 <style lang="scss" scoped>
 .planning-page {
   display: flex;
+  flex-direction: column;
   gap: 24px;
-  height: calc(100vh - $nav-height - 40px);
-  align-items: flex-start;
+  min-height: calc(100vh - $nav-height - 40px);
+}
+
+.planning-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  background: rgba($content-bg, 0.7);
+  border: 1px solid rgba($border-light, 0.88);
+  border-radius: $radius-lg;
+  box-shadow: $shadow-sm;
+}
+
+.hero-copy {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+
+  h1 {
+    flex: 0 0 auto;
+    font-size: 20px;
+    font-weight: 750;
+    letter-spacing: 0;
+    line-height: 1.25;
+    color: $text-primary;
+    text-wrap: pretty;
+  }
+
+  p {
+    min-width: 0;
+    color: $text-secondary;
+    font-size: $font-size-sm;
+    line-height: 1.45;
+    text-wrap: pretty;
+  }
+}
+
+.hero-rail {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+
+  span {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 28px;
+    padding: 5px 10px;
+    color: $text-secondary;
+    font-size: $font-size-xs;
+    font-weight: 600;
+    background: rgba($surface-soft, 0.8);
+    border: 1px solid $border-light;
+    border-radius: 999px;
+  }
+
+  .el-icon {
+    color: $color-primary;
+    font-size: 15px;
+  }
+}
+
+.planning-workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  min-height: 620px;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba($surface-soft, 0.66), rgba($content-bg, 0.96)),
+    $content-bg;
+  border: 1px solid rgba($border-light, 0.9);
+  border-radius: $radius-xl;
+  box-shadow: $shadow-card;
+
+  &.has-output {
+    grid-template-columns: minmax(0, 1fr);
+    height: max(620px, calc(100vh - $nav-height - 180px));
+    min-height: 0;
+    background:
+      linear-gradient(180deg, rgba($surface-soft, 0.5), rgba($content-bg, 0.96)),
+      $content-bg;
+
+    .output-panel {
+      border-left: 0;
+    }
+  }
+
+  &:not(.has-output) {
+    .input-panel {
+      width: min(100%, 620px);
+      justify-self: center;
+    }
+  }
 }
 
 // INPUT PANEL
 .input-panel {
-  width: $input-panel-width;
-  flex-shrink: 0;
-  background: $content-bg;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
   display: flex;
   flex-direction: column;
-  max-height: 100%;
+  min-width: 0;
+  max-height: calc(100vh - $nav-height - 142px);
   overflow: hidden;
+  background: transparent;
 }
 
 // Step Indicator
@@ -706,7 +910,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 0;
   padding: 20px 16px 12px;
-  border-bottom: 0.5px solid $border-card;
+  border-bottom: 1px solid rgba($border-card, 0.76);
   flex-shrink: 0;
 }
 
@@ -773,10 +977,20 @@ onMounted(async () => {
   padding: 0 24px;
 }
 
-.step-emoji {
-  font-size: 40px;
-  text-align: center;
-  margin-bottom: 8px;
+.step-mark {
+  display: grid;
+  width: 50px;
+  height: 50px;
+  place-items: center;
+  margin: 2px auto 12px;
+  color: $color-primary;
+  background: $color-primary-bg;
+  border-radius: 18px;
+
+  :deep(svg) {
+    width: 26px;
+    height: 26px;
+  }
 }
 
 .step-title {
@@ -828,7 +1042,7 @@ onMounted(async () => {
   gap: 8px;
 }
 
-.transport-card {
+.transport-option {
   display: flex;
   align-items: center;
   gap: 14px;
@@ -849,6 +1063,14 @@ onMounted(async () => {
     transition: color 0.2s;
   }
 
+  .t-copy {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+  }
+
   .t-label {
     font-size: 15px;
     font-weight: 600;
@@ -858,7 +1080,17 @@ onMounted(async () => {
   .t-desc {
     font-size: $font-size-xs;
     color: $text-hint;
-    margin-left: auto;
+  }
+
+  .option-check {
+    display: grid;
+    width: 22px;
+    height: 22px;
+    flex: 0 0 auto;
+    place-items: center;
+    color: transparent;
+    border: 1px solid $border-light;
+    border-radius: 999px;
   }
 
   &.active {
@@ -867,6 +1099,11 @@ onMounted(async () => {
 
     .t-icon { color: $color-primary; }
     .t-desc { color: $color-primary; }
+    .option-check {
+      color: #fff;
+      background: $color-primary;
+      border-color: $color-primary;
+    }
   }
 
   &:hover:not(.active) {
@@ -980,6 +1217,25 @@ onMounted(async () => {
   color: $text-secondary;
 }
 
+.confirm-error {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 6px 0 14px;
+  padding: 10px 12px;
+  color: $color-danger;
+  font-size: $font-size-sm;
+  line-height: 1.5;
+  background: rgba($color-danger, 0.07);
+  border: 1px solid rgba($color-danger, 0.18);
+  border-radius: $radius-sm;
+
+  .el-icon {
+    flex: 0 0 auto;
+    margin-top: 2px;
+  }
+}
+
 // Generate Button
 .generate-btn {
   width: 100%;
@@ -1075,16 +1331,15 @@ onMounted(async () => {
   transform: translateX(-16px);
 }
 
-// OUTPUT PANEL (unchanged)
+// OUTPUT PANEL
 .output-panel {
-  flex: 1;
-  background: $content-bg;
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
+  min-width: 0;
+  min-height: 0;
+  background: rgba($surface-soft, 0.58);
+  border-left: 1px solid rgba($border-card, 0.82);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 560px;
   max-height: 100%;
 }
 
@@ -1093,8 +1348,10 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  border-bottom: 0.5px solid $border-card;
+  background: rgba($content-bg, 0.72);
+  border-bottom: 1px solid rgba($border-card, 0.72);
   flex-shrink: 0;
+  backdrop-filter: blur(12px);
 }
 
 .status-left { display: flex; align-items: center; gap: 10px; }
@@ -1123,8 +1380,9 @@ onMounted(async () => {
 }
 
 .stage-steps {
-  display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px; border-bottom: 0.5px solid $border-card;
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px; border-bottom: 1px solid rgba($border-card, 0.72);
   flex-shrink: 0;
+  background: rgba($content-bg, 0.52);
 }
 
 .step-item {
@@ -1136,13 +1394,50 @@ onMounted(async () => {
 }
 
 .stream-content {
-  flex: 1; overflow-y: auto; padding: 20px 24px; font-size: $font-size-body; line-height: 1.8; color: $text-primary;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px 24px;
+  color: $text-primary;
+  font-size: $font-size-body;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .content-card {
-  background: $page-bg; border-radius: $radius-md; padding: 16px 18px; margin-bottom: 14px;
-  .card-label { font-size: $font-size-sm; font-weight: 600; color: $text-secondary; margin-bottom: 8px; }
-  p { font-size: $font-size-body; line-height: 1.7; }
+  min-width: 0;
+  margin-bottom: 14px;
+  padding: 16px 18px;
+  background: rgba($content-bg, 0.84);
+  border: 1px solid rgba($border-card, 0.82);
+  border-radius: $radius-md;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+
+  .card-label {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    font-size: $font-size-sm;
+    font-weight: 600;
+    color: $text-secondary;
+    margin-bottom: 8px;
+
+    .el-icon {
+      color: $color-primary;
+      font-size: 16px;
+    }
+  }
+
+  p {
+    font-size: $font-size-body;
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 
   &.error-card {
     background: rgba($color-danger, 0.06);
@@ -1155,13 +1450,26 @@ onMounted(async () => {
   }
 }
 
-.map-card .amap-link { color: $color-link; font-weight: 500; &:hover { text-decoration: underline; } }
+.realtime-card {
+  white-space: pre-wrap;
+}
+
+.map-card .amap-link {
+  color: $color-link;
+  font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+
+  &:hover { text-decoration: underline; }
+}
 
 .source-meta {
   margin-top: 8px;
   font-size: $font-size-xs;
   color: $text-hint;
   line-height: 1.5;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .route-map-img {
@@ -1180,6 +1488,9 @@ onMounted(async () => {
 }
 
 .download-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   border: none;
   background: $color-primary-bg;
   color: $color-primary;
@@ -1193,11 +1504,30 @@ onMounted(async () => {
 }
 
 .final-markdown, .stream-tokens {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+
   :deep(h2) { font-size: 18px; margin: 20px 0 10px; }
   :deep(h3) { font-size: 16px; margin: 16px 0 8px; }
-  :deep(p) { margin-bottom: 10px; }
+  :deep(p) {
+    margin-bottom: 10px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
   :deep(ul), :deep(ol) { padding-left: 20px; margin-bottom: 10px; }
-  :deep(li) { margin-bottom: 4px; }
+  :deep(li) {
+    margin-bottom: 4px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+  :deep(a),
+  :deep(code),
+  :deep(pre) {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 .cursor-blink { animation: blink 1s infinite; color: $color-primary; font-weight: 300; }
@@ -1206,12 +1536,42 @@ onMounted(async () => {
 // Empty state
 .output-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 32px; text-align: center;
+  background:
+    linear-gradient(180deg, rgba($content-bg, 0.58), rgba($surface-soft, 0.38));
 }
-.empty-illustration { font-size: 56px; margin-bottom: 16px; filter: grayscale(0.2); }
+.empty-visual {
+  display: grid;
+  width: 68px;
+  height: 68px;
+  place-items: center;
+  margin-bottom: 16px;
+  color: #fff;
+  background: $color-ink;
+  border-radius: 24px;
+  box-shadow: $shadow-md;
+
+  :deep(svg) {
+    width: 34px;
+    height: 34px;
+  }
+}
 .empty-title { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
 .empty-desc { font-size: $font-size-sm; color: $text-secondary; line-height: 1.6; margin-bottom: 24px; }
 .empty-features { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; }
-.feat-item { font-size: $font-size-sm; padding: 6px 14px; background: $page-bg; border-radius: 20px; color: $text-secondary; }
+.feat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: $font-size-sm;
+  padding: 6px 14px;
+  background: $page-bg;
+  border-radius: 20px;
+  color: $text-secondary;
+
+  .el-icon {
+    color: $color-primary;
+  }
+}
 
 // Recent records section
 .recent-records {
@@ -1314,22 +1674,55 @@ onMounted(async () => {
 // Mobile
 @media (max-width: 768px) {
   .planning-page {
-    flex-direction: column;
     height: auto;
     gap: 12px;
   }
 
+  .planning-hero {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+
+  .hero-copy {
+    display: block;
+
+    h1 {
+      font-size: 18px;
+    }
+
+    p {
+      margin-top: 4px;
+    }
+  }
+
+  .hero-rail {
+    justify-content: flex-start;
+  }
+
+  .planning-workspace {
+    display: flex;
+    flex-direction: column;
+    min-height: auto;
+    gap: 0;
+    border-radius: $radius-lg;
+
+    &.has-output {
+      height: calc(100dvh - $tab-height - 112px);
+      min-height: 420px;
+    }
+  }
+
   .input-panel {
     width: 100%;
-    border-radius: 0;
-    box-shadow: none;
+    max-height: none;
   }
 
   .output-panel {
-    min-height: 60vh;
-    border-radius: 0;
-    box-shadow: none;
-    border-top: 0.5px solid $border-light;
+    min-height: 0;
+    flex: 1;
+    border-top: 1px solid rgba($border-card, 0.86);
+    border-left: 0;
   }
 
   .recent-grid { grid-template-columns: 1fr; }

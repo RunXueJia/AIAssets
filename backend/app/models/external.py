@@ -14,6 +14,7 @@ class RouteSnapshot(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "route_snapshots"
     __table_args__ = (
         Index("idx_route_snapshots_record", "record_id"),
+        Index("idx_route_snapshots_record_created", "record_id", "created_at", "id"),
         Index("idx_route_snapshots_type_created", "route_type", "created_at"),
         Index("idx_route_snapshots_provider", "provider"),
         {"comment": "地图路线快照"},
@@ -36,6 +37,7 @@ class RouteMapExport(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "route_map_exports"
     __table_args__ = (
         Index("idx_route_map_exports_record", "record_id"),
+        Index("idx_route_map_exports_record_created", "record_id", "created_at", "id"),
         Index("idx_route_map_exports_snapshot", "route_snapshot_id"),
         Index("idx_route_map_exports_status", "status"),
         {"comment": "路径图导出"},
@@ -59,6 +61,7 @@ class WeatherSnapshot(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "weather_snapshots"
     __table_args__ = (
         Index("idx_weather_snapshots_record", "record_id"),
+        Index("idx_weather_snapshots_record_created", "record_id", "created_at", "id"),
         Index("idx_weather_snapshots_city_date", "city_name", "weather_date"),
         Index("idx_weather_snapshots_alert", "alert_level"),
         {"comment": "天气快照"},
@@ -81,6 +84,7 @@ class NewsSnapshot(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "news_snapshots"
     __table_args__ = (
         Index("idx_news_snapshots_record", "record_id"),
+        Index("idx_news_snapshots_record_created", "record_id", "created_at", "id"),
         Index("idx_news_snapshots_query_created", "query_text", "created_at"),
         Index("idx_news_snapshots_category", "category"),
         Index("idx_news_snapshots_provider_category", "provider", "category"),

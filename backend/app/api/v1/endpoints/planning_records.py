@@ -1,16 +1,26 @@
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import get_current_actor
 from app.core.responses import ApiResponse, success_response
-from app.db.session import get_db_session
+from app.db.session import get_db_session, get_sessionmaker
+from app.schemas.generation import GenerateStreamRequest, GenerationStreamEvent
 from app.schemas.records import RecordActor, RegenerateRecordRequest
+from app.services.generation import DatabaseGenerationRecordStore, GenerationService
 from app.services.records import RecordsService
 
 router = APIRouter(prefix="/planning", tags=["planning-records"])
 service = RecordsService()
+STREAM_EVENT_LIMIT = 100
+STREAM_IDLE_TIMEOUT_S = 60
+STREAM_POLL_INTERVAL_S = 0.5
+TERMINAL_RECORD_STATUSES = {"completed", "failed", "canceled"}
 
 
 @router.get("/records", response_model=ApiResponse)
@@ -75,3 +85,94 @@ async def regenerate_planning_record(
         payload=payload,
     )
     return success_response(data=data, message="已创建重新生成任务")
+
+
+@router.get("/records/{record_id}/stream")
+async def stream_planning_record_events(
+    record_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    actor: Annotated[RecordActor, Depends(get_current_actor)],
+    after_sequence: Annotated[int, Query(ge=0)] = 0,
+) -> StreamingResponse:
+    await service.get_stream_record(db, user_id=actor.user_id, record_id=record_id)
+
+    async def event_source() -> AsyncIterator[str]:
+        last_sequence = after_sequence
+        idle_elapsed = 0.0
+        while idle_elapsed < STREAM_IDLE_TIMEOUT_S:
+            async with get_sessionmaker()() as stream_db:
+                events = await service.list_stream_events(
+                    stream_db,
+                    user_id=actor.user_id,
+                    record_id=record_id,
+                    after_sequence=last_sequence,
+                    limit=STREAM_EVENT_LIMIT,
+                )
+            if events:
+                idle_elapsed = 0.0
+                for item in events:
+                    last_sequence = max(last_sequence, int(item["sequence_no"]))
+                    yield _format_stored_sse(item)
+                if events[-1]["event"] in {"done", "error"}:
+                    return
+                continue
+            async with get_sessionmaker()() as stream_db:
+                record = await service.get_stream_record(
+                    stream_db,
+                    user_id=actor.user_id,
+                    record_id=record_id,
+                )
+            if record.status in TERMINAL_RECORD_STATUSES:
+                return
+            await asyncio.sleep(STREAM_POLL_INTERVAL_S)
+            idle_elapsed += STREAM_POLL_INTERVAL_S
+
+    return _sse_response(event_source())
+
+
+@router.post("/records/{record_id}/retry")
+async def retry_planning_record(
+    record_id: int,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    actor: Annotated[RecordActor, Depends(get_current_actor)],
+) -> StreamingResponse:
+    retry_data = await service.retry_planning_record(
+        db,
+        user_id=actor.user_id,
+        record_id=record_id,
+    )
+    request = GenerateStreamRequest.model_validate(retry_data["request_payload"])
+    generation_service = GenerationService(
+        record_store=DatabaseGenerationRecordStore(
+            get_sessionmaker(),
+            user_id=actor.user_id,
+            source_client="web",
+        )
+    )
+
+    async def event_source() -> AsyncIterator[str]:
+        async for event in generation_service.stream_generation(
+            request,
+            existing_record_id=retry_data["record_id"],
+        ):
+            yield generation_service.format_sse(event)
+
+    return _sse_response(event_source())
+
+
+def _format_stored_sse(item: dict) -> str:
+    event = GenerationStreamEvent(event=item["event"], data=item["data"])
+    payload = json.dumps(event.data, ensure_ascii=False, separators=(",", ":"))
+    return f"event: {event.event}\ndata: {payload}\n\n"
+
+
+def _sse_response(event_source: AsyncIterator[str]) -> StreamingResponse:
+    return StreamingResponse(
+        event_source,
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )

@@ -16,6 +16,7 @@ class AmapRouteLinkRequest(BaseModel):
     destination_name: str = Field(min_length=1, max_length=120)
     destination: str = Field(min_length=1, max_length=80)
     transport_mode: str = Field(default="driving", max_length=30)
+    waypoints: list[str] = Field(default_factory=list)
 
 
 class AmapExportRouteMapRequest(BaseModel):

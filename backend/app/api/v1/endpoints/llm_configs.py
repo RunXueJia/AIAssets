@@ -1,6 +1,8 @@
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import require_admin_actor
@@ -79,6 +81,34 @@ async def test_llm_config(
         test_prompt=payload.test_prompt,
     )
     return success_response(data=data, message="连接测试成功")
+
+
+@router.post("/llm_configs/{config_id}/test_stream")
+async def test_llm_config_stream(
+    config_id: int,
+    payload: LlmConfigTestRequest,
+    db: Annotated[AsyncSession, Depends(get_db_session)],
+    _actor: Annotated[RecordActor, Depends(require_admin_actor)],
+) -> StreamingResponse:
+    async def event_source():
+        async for event in service.stream_test_config(
+            db,
+            config_id=config_id,
+            test_prompt=payload.test_prompt,
+        ):
+            event_type = str(event.get("type") or "message")
+            data = json.dumps(event, ensure_ascii=False, separators=(",", ":"))
+            yield f"event: {event_type}\ndata: {data}\n\n"
+
+    return StreamingResponse(
+        event_source(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.post("/llm_configs/{config_id}/enable", response_model=ApiResponse)

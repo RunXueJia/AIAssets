@@ -3,11 +3,20 @@
     <header class="top-nav">
       <div class="nav-inner">
         <router-link to="/" class="brand">
-          <span class="brand-icon">🗺</span>
-          <span class="brand-text">路书匠</span>
+          <span class="brand-icon">
+            <el-icon><Compass /></el-icon>
+          </span>
+          <span class="brand-copy">
+            <span class="brand-text">路书匠</span>
+            <span class="brand-sub">生活规划助手</span>
+          </span>
         </router-link>
         <nav class="nav-links">
-          <router-link to="/history">
+          <router-link to="/" class="nav-pill">
+            <el-icon><EditPen /></el-icon>
+            <span>规划</span>
+          </router-link>
+          <router-link to="/history" class="nav-pill">
             <el-icon><Clock /></el-icon>
             <span>历史</span>
           </router-link>
@@ -35,7 +44,7 @@
 </template>
 
 <script setup>
-import { Clock } from '@element-plus/icons-vue'
+import { Clock, Compass, EditPen } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -46,14 +55,17 @@ const auth = useAuthStore()
   display: flex;
   flex-direction: column;
   min-height: 100vh;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0)),
+    transparent;
 }
 
 .top-nav {
   height: $nav-height;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-bottom: 0.5px solid rgba(0, 0, 0, 0.06);
+  background: rgba($surface-soft, 0.84);
+  backdrop-filter: blur(22px) saturate(1.08);
+  -webkit-backdrop-filter: blur(22px) saturate(1.08);
+  border-bottom: 1px solid rgba($border-light, 0.72);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -66,21 +78,53 @@ const auth = useAuthStore()
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 32px;
 }
 
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 11px;
   color: $text-primary;
-  font-weight: 700;
-  font-size: 18px;
-  letter-spacing: 0.5px;
+  min-height: 44px;
 }
 
 .brand-icon {
-  font-size: 22px;
+  width: 38px;
+  height: 38px;
+  border-radius: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent),
+    $color-primary;
+  box-shadow: 0 12px 24px rgba($color-primary, 0.22);
+
+  :deep(svg) {
+    width: 21px;
+    height: 21px;
+  }
+}
+
+.brand-copy {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+}
+
+.brand-text {
+  font-weight: 750;
+  font-size: 18px;
+  letter-spacing: 0;
+}
+
+.brand-sub {
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 550;
+  color: $text-hint;
 }
 
 .nav-links {
@@ -94,13 +138,27 @@ const auth = useAuthStore()
     align-items: center;
     gap: 5px;
     color: $text-secondary;
-    padding: 6px 14px;
-    border-radius: 20px;
-    transition: all 0.15s;
+    min-height: 38px;
+    padding: 8px 15px;
+    border-radius: 999px;
+    font-weight: 650;
+    transition:
+      color 0.18s ease,
+      background 0.18s ease,
+      box-shadow 0.18s ease,
+      transform 0.18s ease;
 
     &:hover {
       color: $text-primary;
-      background: rgba(0, 0, 0, 0.04);
+      background: rgba($content-bg, 0.72);
+      box-shadow: $shadow-sm;
+      transform: translateY(-1px);
+    }
+
+    &.router-link-active {
+      color: $text-primary;
+      background: $content-bg;
+      box-shadow: $shadow-sm;
     }
   }
 }
@@ -108,8 +166,9 @@ const auth = useAuthStore()
 .login-link {
   background: $color-primary !important;
   color: #fff !important;
-  padding: 6px 18px !important;
-  font-weight: 500;
+  padding: 8px 20px !important;
+  font-weight: 700;
+  box-shadow: 0 10px 22px rgba($color-primary, 0.22);
 
   &:hover {
     background: $color-primary-light !important;
@@ -123,13 +182,17 @@ const auth = useAuthStore()
   gap: 6px;
   cursor: pointer;
   color: $text-secondary;
-  padding: 4px 12px;
-  border-radius: 20px;
+  min-height: 38px;
+  padding: 4px 12px 4px 5px;
+  border-radius: 999px;
   font-size: $font-size-sm;
-  transition: background 0.15s;
+  font-weight: 650;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
-    background: rgba(0, 0, 0, 0.04);
+    color: $text-primary;
+    background: $content-bg;
+    box-shadow: $shadow-sm;
   }
 }
 
@@ -137,7 +200,7 @@ const auth = useAuthStore()
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, $color-primary, $color-primary-light);
+  background: $color-ink;
   color: #fff;
   display: flex;
   align-items: center;
@@ -151,6 +214,6 @@ const auth = useAuthStore()
   max-width: $max-content-width;
   width: 100%;
   margin: 0 auto;
-  padding: 20px 28px;
+  padding: 26px 32px 44px;
 }
 </style>

@@ -14,8 +14,14 @@
   justify-content: center;
   min-height: 60vh;
   gap: 16px;
+  padding: 32px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid $border-light;
+  border-radius: $radius-lg;
+  box-shadow: $shadow-card;
 
-  h1 { font-size: 64px; color: $text-secondary; }
+  h1 { font-size: 64px; color: $text-primary; }
   p { color: $text-secondary; }
 }
 </style>

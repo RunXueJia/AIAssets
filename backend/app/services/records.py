@@ -87,6 +87,50 @@ class RecordsService:
             }
         )
 
+    async def get_stream_record(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        record_id: int,
+    ) -> Any:
+        record = await self.repo.get_record(db, record_id=record_id, user_id=user_id)
+        if record is None:
+            raise AppException("记录不存在", code=404, status_code=404)
+        return record
+
+    async def list_stream_events(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        record_id: int,
+        after_sequence: int = 0,
+        limit: int = 100,
+    ) -> list[dict[str, Any]]:
+        record = await self.get_stream_record(db, user_id=user_id, record_id=record_id)
+        events = await self.repo.list_stream_events_after(
+            db,
+            record_id=record.id,
+            after_sequence=max(after_sequence, 0),
+            limit=min(max(limit, 1), 200),
+        )
+        return [self._stream_event_item(item) for item in events]
+
+    async def retry_planning_record(
+        self,
+        db: AsyncSession,
+        *,
+        user_id: int,
+        record_id: int,
+    ) -> dict[str, Any]:
+        parent_record = await self.repo.get_record(db, record_id=record_id, user_id=user_id)
+        if parent_record is None:
+            raise AppException("记录不存在", code=404, status_code=404)
+        if parent_record.status != "failed":
+            raise AppException("只有失败记录可以重试", code=409, status_code=409)
+        return await self._create_retry_record(db, parent_record=parent_record)
+
     async def regenerate_record(
         self,
         db: AsyncSession,
@@ -122,7 +166,7 @@ class RecordsService:
             record_id=new_record.id,
             parent_record_id=parent_record.id,
             status=new_record.status,
-            stream_url="/api/v1/planning/generate_stream",
+            stream_url=f"/api/v1/planning/records/{new_record.id}/stream",
             request_payload=self._stream_request_payload(input_payload),
         ).model_dump(mode="json")
 
@@ -178,8 +222,15 @@ class RecordsService:
             raise AppException("记录不存在", code=404, status_code=404)
         if parent_record.status != "failed":
             raise AppException("只有失败记录可以重试", code=409, status_code=409)
+        return await self._create_retry_record(db, parent_record=parent_record)
 
-        parent_input = await self.repo.get_record_input(db, record_id=record_id)
+    async def _create_retry_record(
+        self,
+        db: AsyncSession,
+        *,
+        parent_record: Any,
+    ) -> dict[str, Any]:
+        parent_input = await self.repo.get_record_input(db, record_id=parent_record.id)
         input_payload, raw_input = self._build_regeneration_payload(
             parent_record,
             parent_input,
@@ -202,7 +253,7 @@ class RecordsService:
             record_id=new_record.id,
             parent_record_id=parent_record.id,
             status=new_record.status,
-            stream_url="/api/v1/planning/generate_stream",
+            stream_url=f"/api/v1/planning/records/{new_record.id}/stream",
             request_payload=self._stream_request_payload(input_payload),
         ).model_dump(mode="json")
 
@@ -419,6 +470,19 @@ class RecordsService:
             "handled_at": item.handled_at,
             "created_at": item.created_at,
         }
+
+    def _stream_event_item(self, item: Any) -> dict[str, Any]:
+        return self._json_safe(
+            {
+                "id": item.id,
+                "sequence_no": item.sequence_no,
+                "event": item.event_type,
+                "stage": item.stage,
+                "content": item.content,
+                "data": item.payload or {},
+                "created_at": item.created_at,
+            }
+        )
 
     def _llm_call_log(self, item: Any) -> dict[str, Any]:
         return {

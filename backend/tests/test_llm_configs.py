@@ -13,6 +13,7 @@ def make_config(**overrides):
         "id": 1,
         "name": "默认模型",
         "provider": "openai-compatible",
+        "api_format": "openai_chat_completions",
         "base_url": "https://api.example.com/v1",
         "model_name": "gpt-4.1-mini",
         "api_key_encrypted": "hash",
@@ -71,6 +72,7 @@ def test_create_llm_config_masks_api_key_and_commits() -> None:
             payload=LlmConfigCreateRequest(
                 name="默认模型",
                 provider="openai-compatible",
+                api_format="openai_chat_completions",
                 base_url="https://api.example.com/v1",
                 model_name="gpt-4.1-mini",
                 api_key="sk-test-abcd",
@@ -106,6 +108,25 @@ def test_update_llm_config_changes_fields() -> None:
     assert config.name == "新模型"
     assert config.provider == "deepseek"
     assert data["api_key_masked"] == "sk-****-key"
+    db.commit.assert_awaited_once()
+
+
+def test_update_llm_config_changes_api_format() -> None:
+    config = make_config()
+    repo = SimpleNamespace(get_config=AsyncMock(return_value=config), clear_default=AsyncMock())
+    db = SimpleNamespace(commit=AsyncMock())
+    service = LlmConfigsService(repo=repo)
+
+    asyncio.run(
+        service.update_config(
+            db,
+            config_id=1,
+            payload=LlmConfigUpdateRequest(api_format="anthropic_messages"),
+            operator_id=1,
+        )
+    )
+
+    assert config.api_format == "anthropic_messages"
     db.commit.assert_awaited_once()
 
 

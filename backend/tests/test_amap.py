@@ -1,4 +1,5 @@
 import asyncio
+from urllib.parse import parse_qs, urlparse
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -88,6 +89,7 @@ def test_mock_amap_client_supports_search_route_link_and_export_contracts() -> N
     assert data["route"]["provider"] == "mock"
     assert data["link"]["amap_route_url"].startswith("https://uri.amap.com/navigation")
     assert "%E6%9D%AD%E5%B7%9E%E4%B8%9C%E7%AB%99" in data["link"]["amap_route_url"]
+    assert "mode=car" in data["link"]["amap_route_url"]
     assert data["export"]["status"] == "completed"
     assert data["export"]["export_id"] == 1
     assert data["export"]["amap_route_url"]
@@ -188,6 +190,78 @@ def test_amap_web_service_client_resolves_place_names_before_route_request() -> 
     assert route_params["destination"] == "120.143222,30.236064"
 
 
+def test_amap_web_service_client_uses_v5_route_endpoints_and_transport_modes() -> None:
+    client = AmapWebServiceClient(api_key="test")
+    requested: list[tuple[str, str, dict]] = []
+
+    async def fake_request(scope, endpoint, params):  # noqa: ANN001
+        requested.append((scope, endpoint, params))
+        return {
+            "status": "1",
+            "route": {"paths": [{"distance": "6000", "cost": {"duration": "1200"}}]},
+        }
+
+    async def collect() -> None:
+        client._cached_request = fake_request  # type: ignore[method-assign]
+        for mode in ["driving", "walking", "cycling", "motorcycle"]:
+            await client.calculate_route(
+                origin="120.21201,30.29191",
+                destination="120.143222,30.236064",
+                transport_mode=mode,
+                waypoints=["120.160000,30.250000"],
+            )
+
+    asyncio.run(collect())
+
+    route_calls = requested
+    assert route_calls[0][1].endswith("/v5/direction/driving")
+    assert route_calls[0][2]["waypoints"] == "120.160000,30.250000"
+    assert route_calls[1][1].endswith("/v5/direction/walking")
+    assert "waypoints" not in route_calls[1][2]
+    assert route_calls[2][1].endswith("/v5/direction/bicycling")
+    assert route_calls[3][1].endswith("/v5/direction/electrobike")
+
+
+def test_amap_web_service_client_builds_documented_uri_route_link_with_via() -> None:
+    client = AmapWebServiceClient(api_key="test")
+
+    link = asyncio.run(
+        client.create_route_link(
+            origin_name="杭州东站",
+            origin="120.21201,30.29191",
+            destination_name="西湖风景名胜区",
+            destination="120.143222,30.236064",
+            transport_mode="driving",
+            waypoints=["120.160000,30.250000"],
+        )
+    )
+
+    query = parse_qs(urlparse(link["amap_route_url"]).query)
+    assert query["from"] == ["120.21201,30.29191,杭州东站"]
+    assert query["to"] == ["120.143222,30.236064,西湖风景名胜区"]
+    assert query["via"] == ["120.160000,30.250000"]
+    assert query["mode"] == ["car"]
+
+
+def test_amap_web_service_client_maps_motorcycle_uri_to_ride() -> None:
+    client = AmapWebServiceClient(api_key="test")
+
+    link = asyncio.run(
+        client.create_route_link(
+            origin_name="杭州东站",
+            origin="120.21201,30.29191",
+            destination_name="西湖风景名胜区",
+            destination="120.143222,30.236064",
+            transport_mode="motorcycle",
+            waypoints=["120.160000,30.250000"],
+        )
+    )
+
+    query = parse_qs(urlparse(link["amap_route_url"]).query)
+    assert query["mode"] == ["ride"]
+    assert "via" not in query
+
+
 def test_amap_web_service_client_builds_static_map_url_with_route_path() -> None:
     client = AmapWebServiceClient(api_key="test-key")
 
@@ -234,6 +308,7 @@ def test_amap_service_normalizes_mock_client_payloads() -> None:
                     destination_name="西湖风景名胜区",
                     destination="120.143222,30.236064",
                     transport_mode="driving",
+                    waypoints=["120.160000,30.250000"],
                 )
             ),
             "export": await service.export_route_map(

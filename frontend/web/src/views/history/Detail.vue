@@ -17,24 +17,24 @@
 
       <div class="detail-output" v-if="detail.output">
         <div v-if="detail.output.weather_summary" class="section-card">
-          <h4>☁️ 天气预警</h4>
+          <h4><el-icon><PartlyCloudy /></el-icon>天气预警</h4>
           <p>{{ detail.output.weather_summary }}</p>
         </div>
         <div v-if="detail.output.route_summary" class="section-card">
-          <h4>🗺 路线建议</h4>
+          <h4><el-icon><Guide /></el-icon>路线建议</h4>
           <p>{{ detail.output.route_summary }}</p>
         </div>
         <div v-if="detail.output.amap_route_url || mapExport?.image_url" class="section-card">
-          <h4>📍 高德路线</h4>
+          <h4><el-icon><Location /></el-icon>高德路线</h4>
           <img v-if="mapExport?.image_url" :src="mapExport.image_url" class="route-map-img" alt="路线图" />
           <a v-if="detail.output.amap_route_url || mapExport?.amap_route_url" :href="detail.output.amap_route_url || mapExport.amap_route_url" target="_blank" class="amap-link">打开高德路线 →</a>
         </div>
         <div v-if="detail.output.attractions_summary" class="section-card">
-          <h4>🏞 途径景点</h4>
+          <h4><el-icon><Place /></el-icon>途径景点</h4>
           <p>{{ detail.output.attractions_summary }}</p>
         </div>
-        <div v-if="detail.output.realtime_info_summary" class="section-card">
-          <h4>📡 实时信息</h4>
+        <div v-if="detail.output.realtime_info_summary" class="section-card realtime-card">
+          <h4><el-icon><Connection /></el-icon>实时信息</h4>
           <p>{{ detail.output.realtime_info_summary }}</p>
         </div>
         <div v-if="detail.output.final_markdown" class="section-card markdown">
@@ -48,7 +48,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { ArrowLeft } from '@element-plus/icons-vue'
+import { ArrowLeft, Connection, Guide, Location, PartlyCloudy, Place } from '@element-plus/icons-vue'
 import { planningApi } from '@/api/planning'
 import { useLoading } from '@/composables/useLoading'
 import { marked } from 'marked'
@@ -58,7 +58,7 @@ const { loading, withLoading } = useLoading()
 const detail = ref(null)
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
-const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
 
 function statusLabel(s) { return statusMap[s] || s }
 function transportLabel(t) { return transportMap[t] || t }
@@ -138,25 +138,46 @@ onMounted(() => fetchDetail())
 }
 
 .section-card {
+  min-width: 0;
   background: $content-bg;
   border-radius: $radius-lg;
   padding: 20px 24px;
   margin-bottom: 12px;
   box-shadow: $shadow-card;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 
   h4 {
+    display: flex;
+    align-items: center;
+    gap: 8px;
     font-size: 15px;
     font-weight: 600;
     color: $text-secondary;
     margin-bottom: 10px;
+
+    .el-icon {
+      color: $color-primary;
+      font-size: 17px;
+    }
   }
 
-  p { line-height: 1.7; }
+  p {
+    line-height: 1.7;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
 }
 
 .amap-link {
   color: $color-link;
   font-weight: 500;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.realtime-card {
+  white-space: pre-wrap;
 }
 
 .route-map-img {
@@ -167,5 +188,14 @@ onMounted(() => fetchDetail())
 }
 
 .markdown :deep(h2) { font-size: 18px; margin: 16px 0 8px; }
-.markdown :deep(p) { margin-bottom: 10px; }
+.markdown :deep(p) {
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.markdown :deep(a) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
 </style>

@@ -99,7 +99,7 @@ CREATE TABLE generation_records (
   origin_text VARCHAR(255) NOT NULL COMMENT '起点展示文本',
   destination_text VARCHAR(255) NOT NULL COMMENT '目的地展示文本',
   range_text VARCHAR(120) NOT NULL COMMENT '范围/天数展示文本',
-  transport_mode VARCHAR(30) NOT NULL COMMENT 'driving/transit/walking/cycling/mixed',
+  transport_mode VARCHAR(30) NOT NULL COMMENT 'driving/transit/walking/cycling/motorcycle/mixed',
   status VARCHAR(20) NOT NULL DEFAULT 'pending' COMMENT 'pending/streaming/completed/failed/canceled',
   current_stage VARCHAR(40) NULL COMMENT '当前生成阶段',
   summary_title VARCHAR(160) NULL COMMENT '历史列表标题',
@@ -219,6 +219,7 @@ CREATE TABLE generation_errors (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_generation_errors_record (record_id),
+  KEY idx_generation_errors_record_created (record_id, created_at, id),
   KEY idx_generation_errors_source_created (error_source, created_at),
   KEY idx_generation_errors_retryable (retryable)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='生成错误记录';
@@ -235,7 +236,7 @@ CREATE TABLE route_snapshots (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '路线快照ID',
   record_id BIGINT UNSIGNED NOT NULL COMMENT '生成记录ID',
   provider VARCHAR(30) NOT NULL DEFAULT 'amap' COMMENT '地图供应商',
-  route_type VARCHAR(30) NOT NULL COMMENT 'geocode/poi/driving/transit/walking/cycling',
+  route_type VARCHAR(30) NOT NULL COMMENT 'geocode/poi/driving/transit/walking/cycling/motorcycle',
   origin_location VARCHAR(64) NULL COMMENT '起点经纬度',
   destination_location VARCHAR(64) NULL COMMENT '终点经纬度',
   waypoints JSON NULL COMMENT '途经点',
@@ -248,6 +249,7 @@ CREATE TABLE route_snapshots (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_route_snapshots_record (record_id),
+  KEY idx_route_snapshots_record_created (record_id, created_at, id),
   KEY idx_route_snapshots_type_created (route_type, created_at),
   KEY idx_route_snapshots_provider (provider)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='地图路线快照';
@@ -274,6 +276,7 @@ CREATE TABLE route_map_exports (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_route_map_exports_record (record_id),
+  KEY idx_route_map_exports_record_created (record_id, created_at, id),
   KEY idx_route_map_exports_snapshot (route_snapshot_id),
   KEY idx_route_map_exports_status (status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='路径图导出';
@@ -301,6 +304,7 @@ CREATE TABLE weather_snapshots (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_weather_snapshots_record (record_id),
+  KEY idx_weather_snapshots_record_created (record_id, created_at, id),
   KEY idx_weather_snapshots_city_date (city_name, weather_date),
   KEY idx_weather_snapshots_alert (alert_level)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='天气快照';
@@ -327,6 +331,7 @@ CREATE TABLE news_snapshots (
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_news_snapshots_record (record_id),
+  KEY idx_news_snapshots_record_created (record_id, created_at, id),
   KEY idx_news_snapshots_query_created (query_text, created_at),
   KEY idx_news_snapshots_category (category),
   KEY idx_news_snapshots_provider_category (provider, category)
@@ -365,6 +370,7 @@ CREATE TABLE llm_configs (
   id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT 'LLM配置ID',
   name VARCHAR(80) NOT NULL COMMENT '配置名称',
   provider VARCHAR(50) NOT NULL COMMENT '供应商',
+  api_format VARCHAR(50) NOT NULL DEFAULT 'openai_chat_completions' COMMENT 'API格式',
   base_url VARCHAR(500) NOT NULL COMMENT 'Base URL',
   model_name VARCHAR(120) NOT NULL COMMENT '模型名',
   api_key_encrypted TEXT NOT NULL COMMENT 'API Key密文',
@@ -412,6 +418,7 @@ CREATE TABLE llm_call_logs (
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   KEY idx_llm_call_logs_record (record_id),
+  KEY idx_llm_call_logs_record_created (record_id, created_at, id),
   KEY idx_llm_call_logs_config_created (llm_config_id, created_at),
   KEY idx_llm_call_logs_status_created (status, created_at),
   KEY idx_llm_call_logs_provider_model (provider, model_name)

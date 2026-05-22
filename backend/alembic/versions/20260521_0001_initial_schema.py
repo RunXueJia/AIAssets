@@ -219,6 +219,11 @@ def upgrade() -> None:
         comment="生成错误记录",
     )
     op.create_index("idx_generation_errors_record", "generation_errors", ["record_id"])
+    op.create_index(
+        "idx_generation_errors_record_created",
+        "generation_errors",
+        ["record_id", "created_at", "id"],
+    )
     op.create_index("idx_generation_errors_retryable", "generation_errors", ["retryable"])
     op.create_index(
         "idx_generation_errors_source_created", "generation_errors", ["error_source", "created_at"]
@@ -247,6 +252,11 @@ def upgrade() -> None:
     op.create_index("idx_route_snapshots_provider", "route_snapshots", ["provider"])
     op.create_index("idx_route_snapshots_record", "route_snapshots", ["record_id"])
     op.create_index(
+        "idx_route_snapshots_record_created",
+        "route_snapshots",
+        ["record_id", "created_at", "id"],
+    )
+    op.create_index(
         "idx_route_snapshots_type_created", "route_snapshots", ["route_type", "created_at"]
     )
 
@@ -270,6 +280,11 @@ def upgrade() -> None:
         comment="路径图导出",
     )
     op.create_index("idx_route_map_exports_record", "route_map_exports", ["record_id"])
+    op.create_index(
+        "idx_route_map_exports_record_created",
+        "route_map_exports",
+        ["record_id", "created_at", "id"],
+    )
     op.create_index("idx_route_map_exports_snapshot", "route_map_exports", ["route_snapshot_id"])
     op.create_index("idx_route_map_exports_status", "route_map_exports", ["status"])
 
@@ -296,6 +311,11 @@ def upgrade() -> None:
         "idx_weather_snapshots_city_date", "weather_snapshots", ["city_name", "weather_date"]
     )
     op.create_index("idx_weather_snapshots_record", "weather_snapshots", ["record_id"])
+    op.create_index(
+        "idx_weather_snapshots_record_created",
+        "weather_snapshots",
+        ["record_id", "created_at", "id"],
+    )
 
     op.create_table(
         "news_snapshots",
@@ -326,12 +346,23 @@ def upgrade() -> None:
         "idx_news_snapshots_query_created", "news_snapshots", ["query_text", "created_at"]
     )
     op.create_index("idx_news_snapshots_record", "news_snapshots", ["record_id"])
+    op.create_index(
+        "idx_news_snapshots_record_created",
+        "news_snapshots",
+        ["record_id", "created_at", "id"],
+    )
 
     op.create_table(
         "llm_configs",
         pk(),
         sa.Column("name", sa.String(length=80), nullable=False),
         sa.Column("provider", sa.String(length=50), nullable=False),
+        sa.Column(
+            "api_format",
+            sa.String(length=50),
+            server_default=sa.text("'openai_chat_completions'"),
+            nullable=False,
+        ),
         sa.Column("base_url", sa.String(length=500), nullable=False),
         sa.Column("model_name", sa.String(length=120), nullable=False),
         sa.Column("api_key_encrypted", sa.Text(), nullable=False),
@@ -386,6 +417,11 @@ def upgrade() -> None:
     )
     op.create_index("idx_llm_call_logs_provider_model", "llm_call_logs", ["provider", "model_name"])
     op.create_index("idx_llm_call_logs_record", "llm_call_logs", ["record_id"])
+    op.create_index(
+        "idx_llm_call_logs_record_created",
+        "llm_call_logs",
+        ["record_id", "created_at", "id"],
+    )
     op.create_index("idx_llm_call_logs_status_created", "llm_call_logs", ["status", "created_at"])
 
     op.create_table(

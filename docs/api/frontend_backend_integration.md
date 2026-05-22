@@ -92,6 +92,7 @@ VITE_API_BASE_URL=http://localhost:3002
 | `transit` | 公共交通 |
 | `walking` | 步行 |
 | `cycling` | 骑行 |
+| `motorcycle` | 摩托车 |
 | `mixed` | 混合出行 |
 
 流式阶段 `stage`：
@@ -242,7 +243,31 @@ VITE_API_BASE_URL=http://localhost:3002
 }
 ```
 
-### 2.5 退出登录
+### 2.5 获取当前用户信息
+
+`GET /api/v1/auth/me`
+
+认证：需要 `Authorization: Bearer <access_token>`。
+
+响应：
+
+```json
+{
+  "code": 200,
+  "message": "成功",
+  "data": {
+    "id": 1,
+    "username": "admin",
+    "nickname": "管理员",
+    "role": "admin",
+    "status": "active"
+  }
+}
+```
+
+管理后台登录成功、页面刷新和刷新 Token 成功后，都应调用该接口同步最新管理员信息。
+
+### 2.6 退出登录
 
 `POST /api/v1/auth/logout`
 
@@ -311,7 +336,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
 - `token` 事件追加到流式输出区域。
 - `snapshot` 事件用于更新天气、地图、实时信息等结构化模块。
 - `done` 后调用详情接口或直接使用最终事件数据刷新页面。
-- 连接中断时，前端可调用详情接口恢复已保存内容。
+- 连接中断时，前端可调用详情接口恢复已保存内容，也可使用 `GET /api/v1/planning/records/{record_id}/stream` 续接已保存 SSE 事件。
 
 ### 3.2 取消生成
 
@@ -442,12 +467,101 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
   "data": {
     "record_id": 102,
     "parent_record_id": 101,
-    "status": "pending"
+    "status": "pending",
+    "stream_url": "/api/v1/planning/records/102/stream",
+    "request_payload": {
+      "origin": "杭州东站",
+      "destination": "西湖景区",
+      "range": "一天，尽量少走路",
+      "transport_mode": "mixed",
+      "travel_date": "2026-06-01",
+      "people_count": 2,
+      "preferences": ["自然风光", "咖啡"],
+      "avoidances": ["少换乘"]
+    }
   }
 }
 ```
 
-### 3.6 路径图信息
+说明：
+
+- `regenerate` 只创建新记录，不直接启动生成。
+- 前端如需立即生成，可继续用 `request_payload` 调用 `POST /api/v1/planning/generate_stream`。
+- 若后端内部已启动或用户端失败重试接口创建了新任务，则可用 `stream_url` 续接该记录事件流。
+
+### 3.6 续接生成过程
+
+`GET /api/v1/planning/records/{record_id}/stream?after_sequence=0`
+
+认证：需要登录或游客会话，且只能访问自己的记录。
+
+响应为 `text/event-stream`，事件格式与 `POST /api/v1/planning/generate_stream` 相同：
+
+```text
+event: record_created
+data: {"record_id":101,"record_no":"PL202605210001","status":"pending"}
+
+event: stage
+data: {"record_id":101,"stage":"route","stage_name":"路线规划","status":"streaming"}
+
+event: token
+data: {"record_id":101,"stage":"route","content":"建议先..."}
+
+event: snapshot
+data: {"record_id":101,"type":"route","data":{"route_summary":"约12.8公里，预计40分钟"}}
+
+event: done
+data: {"record_id":101,"status":"completed","duration_ms":18500}
+```
+
+续接规则：
+
+- `after_sequence` 表示只返回序号大于该值的已保存事件，默认 `0`。
+- 前端应按接收到事件的顺序更新页面，并在本地记录最新事件序号。
+- 对 `streaming` 记录，接口会短轮询等待新事件，直到收到 `done` / `error` 或空闲超时。
+- 对 `completed` / `failed` / `canceled` 记录，接口会快速返回历史事件并在终态事件后结束。
+- 若前端只需要最终结构化数据，仍可调用详情接口 `GET /api/v1/planning/records/{record_id}`。
+
+### 3.7 失败记录重试并流式返回
+
+`POST /api/v1/planning/records/{record_id}/retry`
+
+认证：需要登录或游客会话，且只能重试自己的失败记录。
+
+请求体：无。
+
+响应为 `text/event-stream`。接口会复制失败记录的原始输入，创建一条新的生成记录，并直接开始流式生成。事件格式与 `POST /api/v1/planning/generate_stream` 相同，但不会返回旧记录事件。
+
+示例：
+
+```text
+event: stage
+data: {"record_id":102,"stage":"understanding","stage_name":"需求理解","status":"streaming"}
+
+event: token
+data: {"record_id":102,"stage":"understanding","content":"本次重试将沿用原始输入..."}
+
+event: done
+data: {"record_id":102,"status":"completed","duration_ms":19000}
+```
+
+错误：
+
+```json
+{
+  "code": 409,
+  "message": "只有失败记录可以重试",
+  "data": null
+}
+```
+
+前端处理要求：
+
+- 失败详情页点击重试时调用该接口，并按 SSE 事件刷新过程区域。
+- 第一个事件中的 `record_id` 是新创建的记录 ID，前端应切换到新记录或保存新 ID。
+- 如果连接中断，可使用 `GET /api/v1/planning/records/{new_record_id}/stream` 续接。
+
+### 3.8 路径图信息
 
 `GET /api/v1/planning/records/{record_id}/route_map`
 
@@ -664,6 +778,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
         "id": 1,
         "name": "默认模型",
         "provider": "openai-compatible",
+        "api_format": "openai_chat_completions",
         "base_url": "https://api.example.com/v1",
         "model_name": "gpt-4.1-mini",
         "api_key_masked": "sk-****abcd",
@@ -687,6 +802,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
 {
   "name": "默认模型",
   "provider": "openai-compatible",
+  "api_format": "openai_chat_completions",
   "base_url": "https://api.example.com/v1",
   "model_name": "gpt-4.1-mini",
   "api_key": "sk-xxxx",
@@ -725,6 +841,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
     "id": 1,
     "name": "默认模型",
     "provider": "openai-compatible",
+    "api_format": "openai_chat_completions",
     "base_url": "https://api.example.com/v1",
     "model_name": "gpt-4.1-mini",
     "api_key_masked": "sk-****xxxx",
@@ -748,6 +865,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
 ```json
 {
   "name": "默认模型",
+  "api_format": "openai_responses",
   "base_url": "https://api.example.com/v1",
   "model_name": "gpt-4.1-mini",
   "api_key": "sk-new-key-or-empty",
@@ -796,6 +914,49 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
     "tested_at": "2026-05-21T10:00:00+08:00"
   }
 }
+```
+
+### 4.12.1 流式调试 LLM 连接
+
+`POST /api/v1/admin/llm_configs/{config_id}/test_stream`
+
+请求：
+
+```json
+{
+  "test_prompt": "请用一句话介绍你自己"
+}
+```
+
+响应为 `text/event-stream`。事件：
+
+```text
+event: start
+data: {"type":"start","status":"streaming","config_id":1,"api_format":"openai_chat_completions","model_name":"gpt-4.1-mini"}
+
+event: token
+data: {"type":"token","content":"OK"}
+
+event: done
+data: {"type":"done","status":"success","message":"OK","duration_ms":1200,"tested_at":"2026-05-22T10:00:00+08:00"}
+```
+
+失败时返回：
+
+```text
+event: error
+data: {"type":"error","status":"failed","message":"LLM 调用失败","duration_ms":300,"tested_at":"2026-05-22T10:00:00+08:00"}
+```
+
+`api_format` 可选值：
+
+```json
+[
+  "openai_chat_completions",
+  "openai_responses",
+  "anthropic_messages",
+  "gemini_generate_content"
+]
 ```
 
 ### 4.13 启用/停用 LLM 配置
@@ -887,7 +1048,8 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
   "origin": "120.21201,30.29191",
   "destination_name": "西湖风景名胜区",
   "destination": "120.143222,30.236064",
-  "transport_mode": "driving"
+  "transport_mode": "driving",
+  "waypoints": ["120.160000,30.250000"]
 }
 ```
 

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     realtime_search_api_key: str | None = None
     tavily_api_key: str | None = None
     llm_provider: str = "openai-compatible"
+    llm_api_format: str = "openai_chat_completions"
     llm_base_url: str | None = None
     llm_model_name: str | None = None
     llm_api_key: str | None = None

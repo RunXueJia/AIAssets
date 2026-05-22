@@ -3,7 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-TransportMode = Literal["driving", "transit", "walking", "cycling", "mixed"]
+TransportMode = Literal["driving", "transit", "walking", "cycling", "motorcycle", "mixed"]
 GenerationStatus = Literal["pending", "streaming", "completed", "failed", "canceled"]
 GenerationStage = Literal[
     "understanding",

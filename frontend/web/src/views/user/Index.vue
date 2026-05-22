@@ -11,18 +11,26 @@
 
       <div class="menu-list">
         <div class="menu-item" @click="$router.push('/history')">
-          <span>📋 历史记录</span>
+          <span class="menu-label">
+            <el-icon><Tickets /></el-icon>
+            历史记录
+          </span>
           <el-icon><ArrowRight /></el-icon>
         </div>
         <div class="menu-item" @click="auth.logout()">
-          <span>🚪 退出登录</span>
+          <span class="menu-label">
+            <el-icon><SwitchButton /></el-icon>
+            退出登录
+          </span>
           <el-icon><ArrowRight /></el-icon>
         </div>
       </div>
     </template>
 
     <div v-else class="guest-block">
-      <div class="guest-icon">👤</div>
+      <div class="guest-icon">
+        <el-icon><User /></el-icon>
+      </div>
       <p class="guest-text">登录后可跨设备同步规划记录</p>
       <el-button type="primary" size="large" class="guest-btn" @click="$router.push('/login')">
         去登录
@@ -32,7 +40,7 @@
 </template>
 
 <script setup>
-import { ArrowRight } from '@element-plus/icons-vue'
+import { ArrowRight, SwitchButton, Tickets, User } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 
 const auth = useAuthStore()
@@ -119,7 +127,34 @@ const auth = useAuthStore()
   padding: 64px 24px;
 }
 
-.guest-icon { font-size: 56px; margin-bottom: 16px; }
+.menu-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+
+  .el-icon {
+    color: $color-primary;
+    font-size: 18px;
+  }
+}
+
+.guest-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 62px;
+  height: 62px;
+  margin-bottom: 16px;
+  color: #fff;
+  background: $color-ink;
+  border-radius: 22px;
+  box-shadow: $shadow-md;
+
+  :deep(svg) {
+    width: 30px;
+    height: 30px;
+  }
+}
 
 .guest-text {
   color: $text-secondary;

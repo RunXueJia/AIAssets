@@ -47,6 +47,17 @@ export const adminApi = {
       test_prompt: testPrompt,
     })
   },
+  testLlmConfigStream(configId, testPrompt, token, signal) {
+    return fetch(`${import.meta.env.VITE_API_BASE_URL}/api/v1/admin/llm_configs/${configId}/test_stream`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+      body: JSON.stringify({ test_prompt: testPrompt }),
+      signal,
+    })
+  },
   enableLlmConfig(configId) {
     return http.post(`/api/v1/admin/llm_configs/${configId}/enable`)
   },

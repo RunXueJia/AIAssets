@@ -1,7 +1,10 @@
 <template>
-  <div class="users-page">
-    <div class="page-header">
-      <h3>用户管理</h3>
+  <div class="users-page page-shell">
+    <div class="page-heading">
+      <div>
+        <h2>用户管理</h2>
+        <p>检索账号状态、角色和最近登录情况。</p>
+      </div>
     </div>
 
     <div class="search-bar">
@@ -24,48 +27,53 @@
       <el-button type="primary" @click="search">查询</el-button>
     </div>
 
-    <el-table :data="users" v-loading="loading" border stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="用户名" min-width="120" />
-      <el-table-column prop="nickname" label="昵称" min-width="120" />
-      <el-table-column prop="email" label="邮箱" min-width="160">
-        <template #default="{ row }">{{ row.email || '-' }}</template>
-      </el-table-column>
-      <el-table-column prop="role" label="角色" width="100">
-        <template #default="{ row }">{{ roleLabel(row.role) }}</template>
-      </el-table-column>
-      <el-table-column prop="status" label="状态" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
-            {{ row.status === 'active' ? '正常' : '已禁用' }}
-          </el-tag>
+    <div class="table-panel">
+      <el-table :data="users" v-loading="loading" border stripe>
+        <el-table-column prop="id" label="ID" width="80" />
+        <el-table-column prop="username" label="用户名" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="nickname" label="昵称" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.email || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="role" label="角色" width="100">
+          <template #default="{ row }">{{ roleLabel(row.role) }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'active' ? 'success' : 'danger'" size="small">
+              {{ row.status === 'active' ? '正常' : '已禁用' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="last_login_at" label="最后登录" min-width="170" show-overflow-tooltip />
+        <el-table-column label="操作" width="180" fixed="right">
+          <template #default="{ row }">
+            <el-button text type="primary" @click="$router.push(`/users/${row.id}`)">详情</el-button>
+            <el-popconfirm
+              v-if="row.status === 'active'"
+              title="确认禁用该用户？"
+              @confirm="handleDisable(row)"
+            >
+              <template #reference>
+                <el-button text type="danger">禁用</el-button>
+              </template>
+            </el-popconfirm>
+            <el-popconfirm
+              v-else
+              title="确认启用该用户？"
+              @confirm="handleEnable(row)"
+            >
+              <template #reference>
+                <el-button text type="success">启用</el-button>
+              </template>
+            </el-popconfirm>
+          </template>
+        </el-table-column>
+        <template #empty>
+          <el-empty description="暂无用户数据" />
         </template>
-      </el-table-column>
-      <el-table-column prop="last_login_at" label="最后登录" min-width="160" />
-      <el-table-column label="操作" width="180" fixed="right">
-        <template #default="{ row }">
-          <el-button text type="primary" @click="$router.push(`/users/${row.id}`)">详情</el-button>
-          <el-popconfirm
-            v-if="row.status === 'active'"
-            title="确认禁用该用户？"
-            @confirm="handleDisable(row)"
-          >
-            <template #reference>
-              <el-button text type="danger">禁用</el-button>
-            </template>
-          </el-popconfirm>
-          <el-popconfirm
-            v-else
-            title="确认启用该用户？"
-            @confirm="handleEnable(row)"
-          >
-            <template #reference>
-              <el-button text type="success">启用</el-button>
-            </template>
-          </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
+      </el-table>
+    </div>
 
     <div class="pagination-wrap" v-if="total > pageSize">
       <el-pagination
@@ -134,20 +142,7 @@ onMounted(() => fetchUsers())
 </script>
 
 <style lang="scss" scoped>
-.page-header {
-  margin-bottom: 20px;
-  h3 { font-size: 18px; }
-}
-
-.search-bar {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.pagination-wrap {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 16px;
+.users-page {
+  max-width: 1280px;
 }
 </style>

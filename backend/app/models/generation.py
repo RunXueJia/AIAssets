@@ -119,6 +119,7 @@ class GenerationError(BigIntPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "generation_errors"
     __table_args__ = (
         Index("idx_generation_errors_record", "record_id"),
+        Index("idx_generation_errors_record_created", "record_id", "created_at", "id"),
         Index("idx_generation_errors_source_created", "error_source", "created_at"),
         Index("idx_generation_errors_retryable", "retryable"),
         {"comment": "生成错误记录"},

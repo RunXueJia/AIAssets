@@ -271,6 +271,31 @@ def test_service_persists_events_snapshots_and_output_in_store() -> None:
     assert store.output_payload["final_markdown"].startswith("## ")
 
 
+def test_service_can_stream_into_existing_pending_record() -> None:
+    store = InMemoryGenerationRecordStore()
+    service = GenerationService(
+        record_store=store,
+        llm_client=RealApiTestLlmClient(),
+        planning_service=DeterministicPlanningService(),
+        token_delay_s=0,
+    )
+
+    async def collect() -> list[tuple[str, dict]]:
+        request = GenerateStreamRequest(origin="A", destination="B", range="一天")
+        await store.use_existing_record(201, request)
+        events = []
+        async for event in service.stream_generation(request, existing_record_id=201):
+            events.append((event.event, event.data))
+        return events
+
+    events = asyncio.run(collect())
+
+    assert events[0][0] == "stage"
+    assert all(event_name != "record_created" for event_name, _ in events)
+    assert events[-1][1]["record_id"] == 201
+    assert events[-1][1]["status"] == "completed"
+
+
 def test_service_marks_record_failed_when_planning_context_fails() -> None:
     store = InMemoryGenerationRecordStore()
     service = GenerationService(

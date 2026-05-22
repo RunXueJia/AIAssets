@@ -2,7 +2,9 @@
   <div class="login-page">
     <div class="login-card">
       <div class="login-header">
-        <div class="login-icon">🗺</div>
+        <div class="login-icon">
+          <el-icon><MapLocation /></el-icon>
+        </div>
         <h2>欢迎回来</h2>
         <p>登录路书匠，同步你的出行规划</p>
       </div>
@@ -45,7 +47,7 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { User, Lock } from '@element-plus/icons-vue'
+import { User, Lock, MapLocation } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import { ElMessage } from 'element-plus'
 
@@ -97,8 +99,21 @@ async function handleLogin() {
 }
 
 .login-icon {
-  font-size: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 54px;
+  height: 54px;
   margin-bottom: 8px;
+  color: #fff;
+  background: linear-gradient(135deg, $color-primary, $color-primary-light);
+  border-radius: 18px;
+  box-shadow: 0 14px 28px rgba($color-primary, 0.22);
+
+  :deep(svg) {
+    width: 28px;
+    height: 28px;
+  }
 }
 
 .login-header h2 {
