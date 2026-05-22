@@ -1,5 +1,5 @@
 # 前后端联调接口文档
-
+python -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload
 ## 1. 联调基础约定
 
 ### 1.1 本地服务地址

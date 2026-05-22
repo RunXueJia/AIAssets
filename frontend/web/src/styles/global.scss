@@ -1,0 +1,95 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: $font-family;
+  font-size: 16px;
+  color: $text-primary;
+  background: $page-bg;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+body {
+  min-height: 100vh;
+  line-height: $line-height-body;
+  font-size: $font-size-body;
+}
+
+a {
+  color: $color-link;
+  text-decoration: none;
+}
+
+// Scrollbar
+::-webkit-scrollbar {
+  width: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 2px;
+}
+
+// Reset Element Plus styles to match design system
+.el-button--primary {
+  --el-button-bg-color: #{$color-primary};
+  --el-button-border-color: #{$color-primary};
+  --el-button-hover-bg-color: #{$color-primary-light};
+  --el-button-hover-border-color: #{$color-primary-light};
+  --el-button-active-bg-color: #{$color-primary};
+  --el-button-active-border-color: #{$color-primary};
+  border-radius: 24px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+.el-input__wrapper {
+  border-radius: 12px !important;
+  box-shadow: 0 0 0 1px $border-light inset !important;
+  transition: box-shadow 0.2s;
+
+  &:hover {
+    box-shadow: 0 0 0 1px $text-hint inset !important;
+  }
+
+  &.is-focus {
+    box-shadow: 0 0 0 2px $color-primary inset !important;
+  }
+}
+
+.el-tag {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+// Mobile ElMessage adaptation
+@media (max-width: 768px) {
+  .el-message {
+    min-width: auto !important;
+    max-width: calc(100vw - 32px) !important;
+    padding: 10px 16px !important;
+    border-radius: $radius-md !important;
+    font-size: $font-size-sm !important;
+
+    .el-message__content {
+      font-size: $font-size-sm !important;
+    }
+
+    .el-message__icon {
+      font-size: 16px !important;
+      margin-right: 8px !important;
+    }
+  }
+
+  .el-message-box {
+    width: calc(100vw - 48px) !important;
+    max-width: 360px !important;
+  }
+}
