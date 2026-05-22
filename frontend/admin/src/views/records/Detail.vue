@@ -149,7 +149,7 @@ const detail = ref(null)
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
 const statusTypeMap = { pending: 'info', streaming: 'warning', completed: 'success', failed: 'danger', canceled: 'info' }
-const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
 const mapExport = computed(() => detail.value?.snapshots?.map_exports?.[0] || null)
 
 function statusLabel(s) { return statusMap[s] || s }

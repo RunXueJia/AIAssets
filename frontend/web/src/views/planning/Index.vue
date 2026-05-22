@@ -316,7 +316,7 @@
             </div>
             <div v-if="realtimeSummary" class="content-card realtime-card">
               <div class="card-label"><el-icon><DataLine /></el-icon>实时信息</div>
-              <p>{{ realtimeSummary }}</p>
+              <div class="realtime-markdown" v-html="renderedRealtimeSummary"></div>
               <div v-if="realtimeMeta" class="source-meta">{{ realtimeMeta }}</div>
             </div>
             <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
@@ -435,18 +435,18 @@ const errors = reactive({ origin: '', destination: '', range: '' })
 
 const transportOptions = [
   { value: 'driving', label: '自驾', desc: '灵活自由', icon: Van },
-  { value: 'transit', label: '公交', desc: '地铁公交', icon: Guide },
+  { value: 'transit', label: '公共交通', desc: '地铁公交', icon: Guide },
   { value: 'walking', label: '步行', desc: '慢行探索', icon: User },
   { value: 'cycling', label: '骑行', desc: '健康环保', icon: Bicycle },
   { value: 'motorcycle', label: '摩托车', desc: '两轮出行', icon: Compass },
-  { value: 'mixed', label: '混合', desc: '智能搭配', icon: Connection },
+  { value: 'mixed', label: '混合出行', desc: '智能搭配', icon: Connection },
 ]
 
 const preferenceOptions = ['自然风光', '人文历史', '亲子友好', '美食探店', '小众路线', '低强度', '咖啡']
 const avoidanceOptions = ['不走高速', '少换乘', '少步行', '避开热门', '避开收费']
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
-const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
 function getStatusLabel(s) { return statusMap[s] || s }
 function getTransportLabel(t) { return transportMap[t] || t }
 
@@ -541,6 +541,9 @@ const statusLabel = computed(() => {
 
 const renderedTokens = computed(() => marked.parse(streamTokens.value))
 const renderedMarkdown = computed(() => finalMarkdown.value ? marked.parse(finalMarkdown.value) : '')
+const renderedRealtimeSummary = computed(() => (
+  realtimeSummary.value ? marked.parse(realtimeSummary.value) : ''
+))
 const weatherMeta = computed(() => formatSourceMeta(weatherSource.value))
 const mapMeta = computed(() => formatSourceMeta(mapSource.value))
 const realtimeMeta = computed(() => formatSourceMeta(realtimeSource.value))
@@ -683,7 +686,7 @@ async function loadRecordDetail(id) {
     if (weatherSnapshot) weatherSource.value = buildSourceMeta(weatherSnapshot)
     const mapExport = res.data?.snapshots?.map_exports?.[0]
     if (mapExport) {
-      amapUrl.value = mapExport.amap_route_url || amapUrl.value
+      amapUrl.value = amapUrl.value || mapExport.amap_route_url || ''
       routeMapImage.value = mapExport.image_url || routeMapImage.value
       mapSource.value = buildSourceMeta(mapExport)
     }
@@ -1450,10 +1453,6 @@ onMounted(async () => {
   }
 }
 
-.realtime-card {
-  white-space: pre-wrap;
-}
-
 .map-card .amap-link {
   color: $color-link;
   font-weight: 500;
@@ -1503,7 +1502,7 @@ onMounted(async () => {
   &:hover { background: rgba($color-primary, 0.15); }
 }
 
-.final-markdown, .stream-tokens {
+.final-markdown, .stream-tokens, .realtime-markdown {
   min-width: 0;
   overflow-wrap: anywhere;
   word-break: break-word;

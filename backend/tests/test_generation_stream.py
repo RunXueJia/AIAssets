@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints.generation import get_generation_service, router
 from app.core.exceptions import register_exception_handlers
+from app.integrations.llm import LlmClientError
 from app.schemas.ai_planning import TripPlanningContext, TripPlanningResult
 from app.schemas.generation import GenerateStreamRequest
 from app.services.generation import GenerationService, InMemoryGenerationRecordStore
@@ -13,6 +14,13 @@ from app.services.generation import GenerationService, InMemoryGenerationRecordS
 
 class RealApiTestLlmClient:
     async def stream_stage_tokens(self, request, stage):  # noqa: ANN001
+        yield f"{stage}: {request.origin} 到 {request.destination}"
+
+
+class FailingTransportLlmClient:
+    async def stream_stage_tokens(self, request, stage):  # noqa: ANN001
+        if stage == "transport":
+            raise LlmClientError("LLM 流式调用失败: connection reset")
         yield f"{stage}: {request.origin} 到 {request.destination}"
 
 
@@ -318,6 +326,42 @@ def test_service_marks_record_failed_when_planning_context_fails() -> None:
     assert events[-2][0] == "error"
     assert events[-2][1]["error_code"] == "GENERATION_FAILED"
     assert events[-1][1]["status"] == "failed"
+
+
+def test_service_continues_when_single_llm_stage_stream_fails() -> None:
+    store = InMemoryGenerationRecordStore()
+    service = GenerationService(
+        record_store=store,
+        llm_client=FailingTransportLlmClient(),
+        planning_service=DeterministicPlanningService(),
+        token_delay_s=0,
+    )
+
+    async def collect() -> list[tuple[str, dict]]:
+        events = []
+        async for event in service.stream_generation(
+            request=GenerateStreamRequest(origin="A", destination="B", range="一天")
+        ):
+            events.append((event.event, event.data))
+        return events
+
+    events = asyncio.run(collect())
+    transport_errors = [
+        payload
+        for event_name, payload in events
+        if event_name == "error" and payload.get("stage") == "transport"
+    ]
+    transport_tokens = [
+        payload
+        for event_name, payload in events
+        if event_name == "token" and payload.get("stage") == "transport"
+    ]
+
+    assert events[-1][0] == "done"
+    assert events[-1][1]["status"] == "completed"
+    assert transport_errors[0]["error_code"] == "LLM_STAGE_FAILED"
+    assert "系统规划结果" in transport_tokens[-1]["content"]
+    assert store.output_payload is not None
 
 
 def test_service_reports_canceled_if_cancel_happens_before_completion() -> None:

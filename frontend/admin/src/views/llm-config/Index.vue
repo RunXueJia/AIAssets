@@ -241,12 +241,10 @@ import { adminApi } from '@/api/admin'
 import { ElMessage } from 'element-plus'
 import { useLoading } from '@/composables/useLoading'
 import { useAuthStore } from '@/stores/auth'
+import { parseSseResponse } from '@/utils/stream'
 import {
   ChatRound,
   Close,
-  Grid,
-  Lightning,
-  Plus,
   Position,
   VideoPause,
 } from '@element-plus/icons-vue'
@@ -402,11 +400,12 @@ async function doTestStream() {
       auth.token,
       controller.signal,
     )
-    if (!response.ok) {
-      const errData = await response.json().catch(() => ({}))
-      throw new Error(errData.message || `HTTP ${response.status}`)
-    }
-    await readTestStream(response)
+    await parseSseResponse(response, {
+      onEvent: handleTestEvent,
+      onError(data) {
+        throw new Error(data.message || '连接测试失败')
+      },
+    })
     fetchConfigs()
   } catch (error) {
     if (error.name === 'AbortError') return
@@ -420,41 +419,7 @@ async function doTestStream() {
   finally { testing.value = false }
 }
 
-async function readTestStream(response) {
-  if (!response.body) throw new Error('流式响应为空')
-  const reader = response.body.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  let eventType = ''
-  let eventDataLines = []
-
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
-
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        eventType = line.slice(7).trim()
-      } else if (line.startsWith('data: ')) {
-        eventDataLines.push(line.slice(6))
-      } else if (line === '' && eventType && eventDataLines.length) {
-        handleTestEvent(eventType, eventDataLines.join('\n'))
-        eventType = ''
-        eventDataLines = []
-      }
-    }
-  }
-
-  if (eventType && eventDataLines.length) {
-    handleTestEvent(eventType, eventDataLines.join('\n'))
-  }
-}
-
-function handleTestEvent(type, data) {
-  const payload = JSON.parse(data)
+function handleTestEvent(type, payload) {
   if (type === 'token') {
     updateAssistantMessage(payload.content || '')
     return
@@ -508,7 +473,8 @@ function scrollTestChatToBottom() {
 }
 
 function apiFormatLabel(value) {
-  return apiFormatOptions.find((item) => item.value === value)?.label || value || '-'
+  const normalizedValue = value || 'openai_chat_completions'
+  return apiFormatOptions.find((item) => item.value === normalizedValue)?.label || normalizedValue
 }
 
 async function handleEnable(row) {

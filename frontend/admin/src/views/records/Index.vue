@@ -21,7 +21,7 @@
         <el-option label="步行" value="walking" />
         <el-option label="骑行" value="cycling" />
         <el-option label="摩托车" value="motorcycle" />
-        <el-option label="混合" value="mixed" />
+        <el-option label="混合出行" value="mixed" />
       </el-select>
       <el-input
         v-model="userKeyword"
@@ -108,7 +108,7 @@ const userKeyword = ref('')
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
 const statusTypeMap = { pending: 'info', streaming: 'warning', completed: 'success', failed: 'danger', canceled: 'info' }
-const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
 
 function statusLabel(s) { return statusMap[s] || s }
 function statusType(s) { return statusTypeMap[s] || 'info' }

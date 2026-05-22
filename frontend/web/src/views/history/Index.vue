@@ -123,7 +123,7 @@ const filters = [
 ]
 
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
-const transportMap = { driving: '自驾', transit: '公交', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合' }
+const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
 const transportIcons = { driving: Van, transit: Guide, walking: User, cycling: Bicycle, motorcycle: Compass, mixed: Connection }
 
 function statusLabel(s) { return statusMap[s] || s }

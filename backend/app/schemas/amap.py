@@ -44,6 +44,10 @@ class AmapRouteResponse(BaseModel):
     duration_s: int
     route_summary: str
     raw: dict[str, Any]
+    transport_mode: str | None = None
+    origin_location: str | None = None
+    destination_location: str | None = None
+    waypoints: list[str] = Field(default_factory=list)
     provider: str | None = None
     mock: bool = False
     fallback_reason: str | None = None

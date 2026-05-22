@@ -144,6 +144,9 @@ def test_amap_web_service_client_parses_poi_and_route_payloads() -> None:
     assert data["search"]["mock"] is False
     assert data["route"]["distance_m"] == 12800
     assert data["route"]["route_summary"] == "约12.8公里，预计40分钟"
+    assert data["route"]["origin_location"] == "120.21201,30.29191"
+    assert data["route"]["destination_location"] == "120.143222,30.236064"
+    assert data["route"]["waypoints"] == []
 
 
 def test_amap_web_service_client_resolves_place_names_before_route_request() -> None:
@@ -222,7 +225,7 @@ def test_amap_web_service_client_uses_v5_route_endpoints_and_transport_modes() -
     assert route_calls[3][1].endswith("/v5/direction/electrobike")
 
 
-def test_amap_web_service_client_builds_documented_uri_route_link_with_via() -> None:
+def test_amap_web_service_client_builds_multi_via_route_link() -> None:
     client = AmapWebServiceClient(api_key="test")
 
     link = asyncio.run(
@@ -232,15 +235,25 @@ def test_amap_web_service_client_builds_documented_uri_route_link_with_via() -> 
             destination_name="西湖风景名胜区",
             destination="120.143222,30.236064",
             transport_mode="driving",
-            waypoints=["120.160000,30.250000"],
+            waypoints=["120.160000,30.250000", "120.170000,30.260000"],
         )
     )
 
-    query = parse_qs(urlparse(link["amap_route_url"]).query)
-    assert query["from"] == ["120.21201,30.29191,杭州东站"]
-    assert query["to"] == ["120.143222,30.236064,西湖风景名胜区"]
-    assert query["via"] == ["120.160000,30.250000"]
-    assert query["mode"] == ["car"]
+    url = link["amap_route_url"]
+    assert url.startswith("https://act.amap.com/activity/2020CommonLanding/index.html")
+    query = parse_qs(urlparse(url).query)
+    assert query["whiteList"] == ["amap.com"]
+    schema = query["schema"][0]
+    schema_query = parse_qs(urlparse(schema).query)
+    assert schema.startswith("amapuri://drive/multiViaPointPlan")
+    assert schema_query["slon"] == ["120.21201"]
+    assert schema_query["slat"] == ["30.29191"]
+    assert schema_query["dlon"] == ["120.143222"]
+    assert schema_query["dlat"] == ["30.236064"]
+    assert schema_query["vian"] == ["2"]
+    assert schema_query["vialons"] == ["120.160000|120.170000"]
+    assert schema_query["vialats"] == ["30.250000|30.260000"]
+    assert schema_query["vianames"] == ["途径点1|途径点2"]
 
 
 def test_amap_web_service_client_maps_motorcycle_uri_to_ride() -> None:
@@ -284,6 +297,7 @@ def test_amap_web_service_client_builds_static_map_url_with_route_path() -> None
     assert "paths=" in export["image_url"]
     assert "markers=" in export["image_url"]
     assert "%3A120.21201%2C30.29191" in export["image_url"]
+    assert "multiViaPointPlan" in export["amap_route_url"]
     assert export["width"] == 750
     assert export["height"] == 500
 
@@ -325,6 +339,7 @@ def test_amap_service_normalizes_mock_client_payloads() -> None:
 
     assert data["search"]["items"][0]["address"] == "示例城市示例地址"
     assert data["route"]["raw"]["waypoints"] == []
+    assert data["route"]["waypoints"] == []
     assert data["link"]["mock"] is True
     assert data["export"]["export_id"] == 101
 

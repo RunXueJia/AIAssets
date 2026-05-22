@@ -425,7 +425,7 @@ data: {"record_id":101,"stage":"route","error_code":"AMAP_FAILED","message":"地
       "weather_summary": "多云，午后可能有阵雨。",
       "route_summary": "地铁加步行更稳妥。",
       "attractions_summary": "推荐湖滨、断桥、平湖秋月。",
-      "realtime_info_summary": "近期无重大交通管制，攻略参考建议避开周末午后高峰。",
+      "realtime_info_summary": "1. 交通管制：近期无重大交通管制，出行前仍建议复核官方交通提醒。\n2. 攻略参考：建议避开周末午后高峰，并提前确认预约、开放时间和现场限流规则。",
       "risk_summary": "雨天注意防滑。",
       "amap_route_url": "https://uri.amap.com/navigation?..."
     },

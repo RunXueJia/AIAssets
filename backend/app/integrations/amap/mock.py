@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 from typing import Any
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 
 APP_TZ = timezone(timedelta(hours=8))
 
@@ -72,7 +72,26 @@ class MockAmapClient:
             "src": "routecraft",
         }
         if params["mode"] == "car" and waypoints:
-            params["via"] = waypoints[0]
+            vianames = "|".join(
+                f"途径点{index}" for index, _ in enumerate(waypoints, start=1)
+            )
+            schema = (
+                "amapuri://drive/multiViaPointPlan?"
+                f"sid=&slat=30.29191&slon=120.21201&sname={origin_name}"
+                f"&did=&dlat=30.236064&dlon=120.143222&dname={destination_name}"
+                f"&m=&dev=0&t=11&vian={len(waypoints)}"
+                f"&vialons={'|'.join(item.split(',', 1)[0] for item in waypoints)}"
+                f"&vialats={'|'.join(item.split(',', 1)[1] for item in waypoints)}"
+                f"&vianames={vianames}"
+            )
+            return {
+                "amap_route_url": (
+                    "https://act.amap.com/activity/2020CommonLanding/index.html?"
+                    f"id=default&local=1&schema={quote(schema, safe='%')}&whiteList=amap.com"
+                ),
+                "mock": True,
+                "provider": self.provider,
+            }
         return {
             "amap_route_url": f"https://uri.amap.com/navigation?{urlencode(params)}",
             "mock": True,
@@ -92,12 +111,23 @@ class MockAmapClient:
         size: str = "750*500",
         zoom: int = 11,
     ) -> dict[str, Any]:
+        route_url = f"https://uri.amap.com/navigation?record={record_id}"
+        if origin and destination and waypoints:
+            route_url = await self.create_route_link(
+                origin_name="",
+                origin=origin,
+                destination_name="",
+                destination=destination,
+                transport_mode="driving",
+                waypoints=waypoints,
+            )
+            route_url = route_url["amap_route_url"]
         return {
             "export_id": route_snapshot_id or record_id,
             "status": "completed",
             "image_url": f"http://localhost:3002/static/route-maps/{record_id}.png",
             "export_type": export_type,
-            "amap_route_url": f"https://uri.amap.com/navigation?record={record_id}",
+            "amap_route_url": route_url,
             "width": _size_part(size, 0),
             "height": _size_part(size, 1),
             "mock": True,

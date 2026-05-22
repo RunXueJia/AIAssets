@@ -462,6 +462,12 @@ class OpenAICompatibleGenerationClient:
             "realtime": "整理实时信息检索结果",
             "summary": "汇总最终规划建议",
         }
+        output_rule = "请只输出该阶段的 1-3 条中文要点。"
+        if stage == "realtime":
+            output_rule = (
+                "请只输出 Markdown 有序列表，使用“1.”、“2.”、“3.”编号，"
+                "每条对应一条实时资讯、交通管制、攻略或避坑提醒。"
+            )
         return (
             f"阶段：{labels[stage]}\n"
             f"起点：{request.origin}\n"
@@ -472,7 +478,7 @@ class OpenAICompatibleGenerationClient:
             f"人数：{request.people_count or '未指定'}\n"
             f"偏好：{'、'.join(request.preferences) or '无'}\n"
             f"避免项：{'、'.join(request.avoidances) or '无'}\n"
-            "请只输出该阶段的 1-3 条中文要点。"
+            f"{output_rule}"
         )
 
 

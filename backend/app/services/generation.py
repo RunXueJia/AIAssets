@@ -9,7 +9,11 @@ from uuid import uuid4
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.integrations.llm import GenerationLlmClientProtocol, create_llm_client_from_settings
+from app.integrations.llm import (
+    GenerationLlmClientProtocol,
+    LlmClientError,
+    create_llm_client_from_settings,
+)
 from app.models.generation import GenerationRecord
 from app.repositories.records import RecordsRepository
 from app.schemas.generation import GenerateStreamRequest, GenerationStage, GenerationStreamEvent
@@ -430,25 +434,38 @@ class GenerationService:
                 await self.record_store.append_event(stage_event)
                 yield stage_event
 
-                async for token in llm_client.stream_stage_tokens(request, stage):
-                    if await self.record_store.is_canceled(record.id):
-                        done_event = self._done_event(record.id, started_at, status="canceled")
-                        await self.record_store.append_event(done_event)
-                        yield done_event
-                        return
+                try:
+                    async for token in llm_client.stream_stage_tokens(request, stage):
+                        if await self.record_store.is_canceled(record.id):
+                            done_event = self._done_event(
+                                record.id,
+                                started_at,
+                                status="canceled",
+                            )
+                            await self.record_store.append_event(done_event)
+                            yield done_event
+                            return
 
-                    token_event = GenerationStreamEvent(
-                        event="token",
-                        data={
-                            "record_id": record.id,
-                            "stage": stage,
-                            "content": token,
-                        },
-                    )
-                    await self.record_store.append_event(token_event)
-                    yield token_event
-                    if self.token_delay_s:
-                        await asyncio.sleep(self.token_delay_s)
+                        token_event = GenerationStreamEvent(
+                            event="token",
+                            data={
+                                "record_id": record.id,
+                                "stage": stage,
+                                "content": token,
+                            },
+                        )
+                        await self.record_store.append_event(token_event)
+                        yield token_event
+                        if self.token_delay_s:
+                            await asyncio.sleep(self.token_delay_s)
+                except LlmClientError as exc:
+                    async for event in self._llm_stage_fallback_events(
+                        record_id=record.id,
+                        stage=stage,
+                        error=exc,
+                    ):
+                        await self.record_store.append_event(event)
+                        yield event
 
                 snapshot = self._snapshot_for_stage(record.id, stage, planning_result)
                 if snapshot is not None:
@@ -551,6 +568,44 @@ class GenerationService:
 
     def _duration_ms_since(self, started_at: datetime) -> int:
         return max(0, int((datetime.now(APP_TZ) - started_at).total_seconds() * 1000))
+
+    async def _llm_stage_fallback_events(
+        self,
+        *,
+        record_id: int,
+        stage: GenerationStage,
+        error: LlmClientError,
+    ) -> AsyncIterator[GenerationStreamEvent]:
+        yield GenerationStreamEvent(
+            event="error",
+            data={
+                "record_id": record_id,
+                "stage": stage,
+                "error_code": "LLM_STAGE_FAILED",
+                "message": "当前阶段大模型流式输出中断，已使用系统规划结果继续生成。",
+                "detail": str(error),
+            },
+        )
+        yield GenerationStreamEvent(
+            event="token",
+            data={
+                "record_id": record_id,
+                "stage": stage,
+                "content": self._stage_fallback_text(stage),
+            },
+        )
+
+    def _stage_fallback_text(self, stage: GenerationStage) -> str:
+        return {
+            "understanding": "已根据输入需求继续生成规划。",
+            "weather": "天气信息已写入结果模块，请以天气快照为准。",
+            "route": "路线信息已写入结果模块，请以路线快照为准。",
+            "transport": "交通建议已由系统规划结果补充，请继续查看后续路线链接和总结。",
+            "map_export": "地图链接已由系统导出，请使用下方高德路线入口。",
+            "attractions": "途径景点已由系统检索结果补充。",
+            "realtime": "实时信息已由检索结果补充，出行前请再次复核。",
+            "summary": "最终摘要已由系统规划结果生成。",
+        }[stage]
 
     def _iso_now(self) -> str:
         return datetime.now(APP_TZ).isoformat()

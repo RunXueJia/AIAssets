@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
+from html import escape as escape_html
 from typing import Any
 
 from app.schemas.ai_planning import (
@@ -40,7 +41,7 @@ PROMPT_TEMPLATE = """你是路书匠 AI 规划引擎。
 1. 先给天气与风险提示。
 2. 给出路径点规划、公共交通或驾车建议。
 3. 给出途径景点说明。
-4. 给出实时信息来源摘要。
+4. 实时信息部分必须使用 Markdown 有序列表格式，每条以“1.”、“2.”开头。
 5. 最终输出 Markdown 和 JSON 摘要。
 """
 
@@ -136,14 +137,14 @@ class AiPlanningService:
             fallback=self._empty_weather_context(request),
             provider="weather",
         )
-        route = await self._safe_context(
-            self._route_context(request),
-            fallback=self._empty_route_context(request),
-            provider="amap",
-        )
         attractions = await self._safe_context(
             self._attractions_context(request),
             fallback=self._empty_attractions_context(request),
+            provider="amap",
+        )
+        route = await self._safe_context(
+            self._route_context(request, attractions=attractions),
+            fallback=self._empty_route_context(request),
             provider="amap",
         )
         realtime = await realtime_task
@@ -268,15 +269,36 @@ class AiPlanningService:
             weather_date=request.travel_date,
         )
 
-    async def _route_context(self, request: GenerateStreamRequest) -> dict[str, Any]:
+    async def _route_context(
+        self,
+        request: GenerateStreamRequest,
+        *,
+        attractions: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        waypoint_candidates = self._route_waypoint_candidates(
+            request,
+            attractions=attractions,
+        )
         return await self.amap_service.calculate_route(
             AmapRouteRequest(
                 origin=request.origin,
                 destination=request.destination,
                 transport_mode=request.transport_mode,
-                waypoints=[],
+                waypoints=waypoint_candidates,
             )
         )
+
+    def _route_waypoint_candidates(
+        self,
+        request: GenerateStreamRequest,
+        *,
+        attractions: dict[str, Any] | None,
+    ) -> list[str]:
+        if request.transport_mode not in {"driving", "mixed"}:
+            return []
+        if not attractions:
+            return []
+        return self._locations_from_attractions(attractions, request=request)
 
     async def _map_export_context(
         self,
@@ -330,7 +352,11 @@ class AiPlanningService:
         ]
         map_export = {
             **export,
-            "amap_route_url": link.get("amap_route_url") or export.get("amap_route_url"),
+            "amap_route_url": self._preferred_amap_route_url(
+                link=link,
+                export=export,
+                waypoint_locations=waypoint_locations,
+            ),
             "route_snapshot_id": route.get("route_snapshot_id"),
             "source_updated_at": self._iso_now(),
         }
@@ -343,6 +369,21 @@ class AiPlanningService:
                 transport_mode=request.transport_mode,
             )
         return map_export
+
+    def _preferred_amap_route_url(
+        self,
+        *,
+        link: dict[str, Any],
+        export: dict[str, Any],
+        waypoint_locations: list[str],
+    ) -> str | None:
+        link_url = link.get("amap_route_url")
+        export_url = export.get("amap_route_url")
+        if waypoint_locations and isinstance(export_url, str):
+            return export_url
+        if isinstance(link_url, str):
+            return link_url
+        return export_url if isinstance(export_url, str) else None
 
     def _fallback_amap_route_url(
         self,
@@ -434,11 +475,6 @@ class AiPlanningService:
             raise
         news_traffic = [*news.get("items", []), *traffic.get("items", [])]
         guide_pitfall = [*guide.get("items", []), *pitfall.get("items", [])]
-        summaries = [
-            item.get("realtime_info_summary")
-            for item in [news, traffic, guide, pitfall]
-            if item.get("realtime_info_summary")
-        ]
         fallback_reasons = [
             item.get("fallback_reason")
             for item in [news, traffic, guide, pitfall]
@@ -447,7 +483,14 @@ class AiPlanningService:
         return {
             "news_traffic": news_traffic,
             "guide_pitfall": guide_pitfall,
-            "realtime_info_summary": " ".join(summaries),
+            "realtime_info_summary": self._realtime_markdown_summary(
+                [
+                    ("新闻资讯", news),
+                    ("交通管制", traffic),
+                    ("攻略参考", guide),
+                    ("避坑参考", pitfall),
+                ]
+            ),
             "provider": self._provider_for([news, traffic, guide, pitfall]),
             "mock": all(item.get("mock", False) for item in [news, traffic, guide, pitfall]),
             "fallback_reason": "；".join(dict.fromkeys(fallback_reasons))
@@ -545,7 +588,7 @@ class AiPlanningService:
         return {
             "news_traffic": [],
             "guide_pitfall": [],
-            "realtime_info_summary": "未提供实时检索上下文。",
+            "realtime_info_summary": "1. 未提供实时检索上下文。",
             "source_updated_at": self._iso_now(),
             "provider": "none",
             "mock": False,
@@ -614,6 +657,45 @@ class AiPlanningService:
         )
         return "\n".join(lines)
 
+    def _realtime_markdown_summary(self, sections: list[tuple[str, dict[str, Any]]]) -> str:
+        items: list[str] = []
+        for label, data in sections:
+            summary = self._realtime_section_summary(label=label, data=data)
+            if summary:
+                items.append(summary)
+        if not items:
+            items.append("暂未检索到实时信息，建议出行前再次复核。")
+        return "\n".join(f"{index}. {item}" for index, item in enumerate(items, start=1))
+
+    def _realtime_section_summary(self, *, label: str, data: dict[str, Any]) -> str:
+        summary = self._clean_realtime_summary(data.get("realtime_info_summary"))
+        items = [item for item in data.get("items") or [] if isinstance(item, dict)]
+        if not items:
+            return summary
+
+        titles = [
+            escape_html(str(item.get("title") or "").strip(), quote=False)
+            for item in items[:3]
+            if str(item.get("title") or "").strip()
+        ]
+        sources = [
+            escape_html(str(item.get("source") or "").strip(), quote=False)
+            for item in items[:3]
+            if str(item.get("source") or "").strip()
+        ]
+        if titles:
+            text = f"{label}：重点关注{'；'.join(titles)}。"
+        else:
+            text = f"{label}：{summary or '已检索到相关信息，出行前建议复核。'}"
+        if sources:
+            text += f" 来源：{'、'.join(dict.fromkeys(sources))}。"
+        return text
+
+    def _clean_realtime_summary(self, value: Any) -> str:
+        if not isinstance(value, str):
+            return ""
+        return escape_html(" ".join(value.strip().split()), quote=False)
+
     def _provider_for(self, items: list[dict[str, Any]]) -> str:
         providers = {item.get("provider") for item in items if item.get("provider")}
         if len(providers) == 1:
@@ -641,7 +723,38 @@ class AiPlanningService:
                 location = waypoint.get("location")
                 if isinstance(location, str) and "," in location:
                     locations.append(location)
+        if not locations:
+            raw = route.get("raw")
+            if isinstance(raw, dict):
+                for waypoint in raw.get("waypoints") or []:
+                    if isinstance(waypoint, str) and "," in waypoint:
+                        locations.append(waypoint)
         return locations
+
+    def _locations_from_attractions(
+        self,
+        attractions: dict[str, Any],
+        *,
+        request: GenerateStreamRequest,
+    ) -> list[str]:
+        origin = request.origin.strip()
+        destination = request.destination.strip()
+        locations: list[str] = []
+        seen: set[str] = set()
+        for item in attractions.get("items") or []:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name") or "").strip()
+            location = item.get("location")
+            if not isinstance(location, str) or "," not in location:
+                continue
+            if name and name in {origin, destination}:
+                continue
+            if location in seen:
+                continue
+            seen.add(location)
+            locations.append(location)
+        return locations[:5]
 
     def _iso_now(self) -> str:
         return datetime.now(APP_TZ).isoformat()

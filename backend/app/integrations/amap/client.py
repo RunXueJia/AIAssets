@@ -2,7 +2,7 @@ import asyncio
 import json
 from datetime import datetime, timedelta, timezone
 from typing import Any, Protocol
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from app.integrations.cache import TtlCache
@@ -137,6 +137,11 @@ class AmapWebServiceClient:
         for waypoint in waypoints:
             resolved = await self._resolve_place(waypoint)
             waypoint_locations.append(resolved["location"])
+        waypoint_locations = self._dedupe_route_waypoints(
+            waypoint_locations,
+            origin=origin_location,
+            destination=destination_location,
+        )
         params: dict[str, Any] = {
             "origin": origin_location,
             "destination": destination_location,
@@ -181,6 +186,7 @@ class AmapWebServiceClient:
             "route_summary": self._route_summary(distance_m, duration_s),
             "provider": self.provider,
             "mock": False,
+            "transport_mode": transport_mode,
             "origin_location": origin_location,
             "destination_location": destination_location,
             "waypoints": waypoint_locations,
@@ -210,23 +216,30 @@ class AmapWebServiceClient:
         origin_place = await self._resolve_place(origin)
         destination_place = await self._resolve_place(destination)
         resolved_waypoints = [
-            await self._resolve_place(waypoint)
+            {
+                **await self._resolve_place(waypoint),
+                "name": self._waypoint_display_name(waypoint),
+            }
             for waypoint in (waypoints or [])
             if waypoint.strip()
         ]
-        params: dict[str, str] = {
-            "from": self._uri_point(origin_place["location"], origin_name),
-            "to": self._uri_point(destination_place["location"], destination_name),
-            "mode": self._uri_transport_mode(transport_mode),
-            "src": "routecraft",
-        }
-        if params["mode"] == "car" and resolved_waypoints:
-            params["via"] = self._uri_point(
-                resolved_waypoints[0]["location"],
-                self._waypoint_name(waypoints or []),
-            )
+        resolved_waypoints = self._dedupe_uri_waypoints(
+            resolved_waypoints,
+            origin=origin_place["location"],
+            destination=destination_place["location"],
+        )
+        route_url = self._route_uri(
+            origin=origin_place["location"],
+            destination=destination_place["location"],
+            origin_name=origin_name,
+            destination_name=destination_name,
+            transport_mode=transport_mode,
+            waypoints=resolved_waypoints,
+        )
+        if route_url is None:
+            raise AmapClientError("缺少高德导航链接起终点")
         return {
-            "amap_route_url": f"https://uri.amap.com/navigation?{urlencode(params)}",
+            "amap_route_url": route_url,
             "mock": False,
             "provider": self.provider,
         }
@@ -277,6 +290,7 @@ class AmapWebServiceClient:
             "amap_route_url": self._route_uri(
                 origin=origin,
                 destination=destination,
+                transport_mode="driving",
                 waypoints=waypoints or [],
             ),
             "width": self._size_part(size, 0),
@@ -433,28 +447,137 @@ class AmapWebServiceClient:
         *,
         origin: str | None,
         destination: str | None,
-        waypoints: list[str] | None = None,
+        origin_name: str | None = None,
+        destination_name: str | None = None,
+        transport_mode: str = "driving",
+        waypoints: list[str] | list[dict[str, str]] | None = None,
     ) -> str | None:
         if not origin or not destination:
             return None
-        params = {"from": origin, "to": destination, "mode": "car", "src": "routecraft"}
-        first_waypoint = next(
-            (waypoint for waypoint in (waypoints or []) if self._is_location(waypoint)),
-            None,
-        )
-        if first_waypoint:
-            params["via"] = first_waypoint
+        mode = self._uri_transport_mode(transport_mode)
+        waypoint_items = self._normalize_uri_waypoints(waypoints or [])
+        if mode == "car" and waypoint_items:
+            return self._multi_via_route_landing_url(
+                origin=origin,
+                destination=destination,
+                origin_name=origin_name,
+                destination_name=destination_name,
+                waypoints=waypoint_items,
+            )
+        params = {
+            "from": self._uri_point(origin, origin_name),
+            "to": self._uri_point(destination, destination_name),
+            "mode": mode,
+            "src": "routecraft",
+        }
         return f"https://uri.amap.com/navigation?{urlencode(params)}"
+
+    def _multi_via_route_landing_url(
+        self,
+        *,
+        origin: str,
+        destination: str,
+        origin_name: str | None,
+        destination_name: str | None,
+        waypoints: list[dict[str, str]],
+    ) -> str:
+        slon, slat = self._split_location(origin)
+        dlon, dlat = self._split_location(destination)
+        waypoint_lons: list[str] = []
+        waypoint_lats: list[str] = []
+        waypoint_names: list[str] = []
+        for index, waypoint in enumerate(waypoints, start=1):
+            lon, lat = self._split_location(waypoint["location"])
+            waypoint_lons.append(lon)
+            waypoint_lats.append(lat)
+            waypoint_names.append(waypoint.get("name") or f"途径点{index}")
+        schema_params = {
+            "sid": "",
+            "slat": slat,
+            "slon": slon,
+            "sname": origin_name or "",
+            "did": "",
+            "dlat": dlat,
+            "dlon": dlon,
+            "dname": destination_name or "",
+            "m": "",
+            "dev": "0",
+            "t": "11",
+            "vian": str(len(waypoints)),
+            "vialons": "|".join(waypoint_lons),
+            "vialats": "|".join(waypoint_lats),
+            "vianames": "|".join(waypoint_names),
+        }
+        schema = f"amapuri://drive/multiViaPointPlan?{urlencode(schema_params)}"
+        return (
+            "https://act.amap.com/activity/2020CommonLanding/index.html?"
+            f"id=default&local=1&schema={quote(schema, safe='%')}&whiteList=amap.com"
+        )
+
+    def _normalize_uri_waypoints(
+        self,
+        waypoints: list[str] | list[dict[str, str]],
+    ) -> list[dict[str, str]]:
+        items: list[dict[str, str]] = []
+        for waypoint in waypoints:
+            if isinstance(waypoint, str):
+                if self._is_location(waypoint):
+                    items.append({"location": waypoint, "name": ""})
+                continue
+            location = waypoint.get("location")
+            if self._is_location(location):
+                items.append(
+                    {
+                        "location": str(location),
+                        "name": str(waypoint.get("name") or ""),
+                    }
+                )
+        return items
+
+    def _split_location(self, location: str) -> tuple[str, str]:
+        lon, lat = location.split(",", 1)
+        return lon, lat
+
+    def _dedupe_route_waypoints(
+        self,
+        waypoints: list[str],
+        *,
+        origin: str,
+        destination: str,
+    ) -> list[str]:
+        seen = {origin, destination}
+        deduped: list[str] = []
+        for waypoint in waypoints:
+            if waypoint in seen:
+                continue
+            seen.add(waypoint)
+            deduped.append(waypoint)
+        return deduped
+
+    def _dedupe_uri_waypoints(
+        self,
+        waypoints: list[dict[str, str]],
+        *,
+        origin: str,
+        destination: str,
+    ) -> list[dict[str, str]]:
+        seen = {origin, destination}
+        deduped: list[dict[str, str]] = []
+        for waypoint in waypoints:
+            location = waypoint["location"]
+            if location in seen:
+                continue
+            seen.add(location)
+            deduped.append(waypoint)
+        return deduped
 
     def _uri_point(self, location: str, name: str | None = None) -> str:
         normalized_name = (name or "").replace(",", " ").strip()
         return f"{location},{normalized_name}" if normalized_name else location
 
-    def _waypoint_name(self, waypoints: list[str]) -> str | None:
-        if not waypoints:
-            return None
-        waypoint = waypoints[0].strip()
-        return None if self._is_location(waypoint) else waypoint
+    def _waypoint_display_name(self, waypoint: str) -> str:
+        waypoint = waypoint.strip()
+        return "" if self._is_location(waypoint) else waypoint
 
     def _size_part(self, size: str, index: int) -> int | None:
         parts = size.split("*", 1)

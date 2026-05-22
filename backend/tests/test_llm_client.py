@@ -10,6 +10,7 @@ from app.integrations.llm.client import (
     LlmRuntimeConfig,
     OpenAICompatibleGenerationClient,
 )
+from app.schemas.generation import GenerateStreamRequest
 
 
 class _FakeResponse:
@@ -121,3 +122,14 @@ def test_gemini_stream_extracts_candidate_parts() -> None:
 
     with patch("app.integrations.llm.client.urlopen", return_value=_FakeResponse(body)):
         assert list(client._stream_text_sync("hello")) == ["O", "K"]
+
+
+def test_realtime_stage_prompt_requires_ordered_markdown_list() -> None:
+    prompt = _client()._stage_prompt(
+        GenerateStreamRequest(origin="杭州东站", destination="西湖景区", range="一天"),
+        "realtime",
+    )
+
+    assert "Markdown 有序列表" in prompt
+    assert "1." in prompt
+    assert "2." in prompt
