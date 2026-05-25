@@ -39,6 +39,24 @@ class AmapSearchPlacesResponse(BaseModel):
     fallback_reason: str | None = None
 
 
+class AmapReverseGeocodeRequest(BaseModel):
+    location: str = Field(min_length=1, max_length=40)
+
+
+class AmapReverseGeocodeResponse(BaseModel):
+    province: str = ""
+    city: str = ""
+    district: str = ""
+    adcode: str = ""
+    citycode: str = ""
+    formatted_address: str = ""
+    province_city_district: str = ""
+    source_updated_at: str
+    mock: bool = False
+    provider: str | None = None
+    fallback_reason: str | None = None
+
+
 class AmapRouteResponse(BaseModel):
     distance_m: int
     duration_s: int

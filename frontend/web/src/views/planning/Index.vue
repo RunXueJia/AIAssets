@@ -41,29 +41,27 @@
                 <el-icon><Location /></el-icon>
               </div>
               <h3 class="step-title">去哪儿？</h3>
-              <p class="step-desc">输入起点、目的地和这次出行的范围。</p>
+              <p class="step-desc">选择起点、目的地和这次出行的范围。</p>
               <div class="step-form">
                 <div class="input-group">
                   <label class="input-label">起点</label>
-                  <el-input
+                  <CityLevelPicker
                     v-model="form.origin"
-                    placeholder="城市、地址或地标"
-                    maxlength="100"
-                    size="large"
+                    placeholder="请选择省 / 市 / 县"
                     :class="{ error: errors.origin }"
-                    @input="errors.origin = ''"
+                    @change="handleOriginChange"
+                    @clear="handleOriginClear"
                   />
                   <span v-if="errors.origin" class="field-error">{{ errors.origin }}</span>
                 </div>
                 <div class="input-group">
                   <label class="input-label">目的地</label>
-                  <el-input
+                  <CityLevelPicker
                     v-model="form.destination"
-                    placeholder="想去哪里？"
-                    maxlength="100"
-                    size="large"
+                    placeholder="请选择省 / 市 / 县"
                     :class="{ error: errors.destination }"
-                    @input="errors.destination = ''"
+                    @change="errors.destination = ''"
+                    @clear="errors.destination = ''"
                   />
                   <span v-if="errors.destination" class="field-error">{{ errors.destination }}</span>
                 </div>
@@ -410,6 +408,7 @@ import {
   Van,
   Warning,
 } from '@element-plus/icons-vue'
+import CityLevelPicker from '@/components/CityLevelPicker.vue'
 import { useAuthStore } from '@/stores/auth'
 import { planningApi } from '@/api/planning'
 import { createStreamClient } from '@/utils/stream'
@@ -423,6 +422,13 @@ const streamContent = ref(null)
 const autoScrollOutput = ref(true)
 const outputBottomThreshold = 48
 let scrollFrameId = 0
+const cityTree = ref([])
+let cityTreePromise = null
+const locationAutoFillState = reactive({
+  requested: false,
+  resolved: false,
+  userTouchedOrigin: false,
+})
 
 // Wizard state
 const currentStep = ref(0)
@@ -480,13 +486,23 @@ function formatRelative(t) {
 
 function validateStep(step) {
   if (step === 0) {
-    errors.origin = form.origin.trim() ? '' : '请输入起点'
-    errors.destination = form.destination.trim() ? '' : '请输入目的地'
+    errors.origin = form.origin.trim() ? '' : '请选择起点'
+    errors.destination = form.destination.trim() ? '' : '请选择目的地'
     errors.range = form.range.trim() ? '' : '请输入出行范围'
     return !errors.origin && !errors.destination && !errors.range
   }
   if (step === 1) return !!form.transport_mode
   return true
+}
+
+function handleOriginChange() {
+  locationAutoFillState.userTouchedOrigin = true
+  errors.origin = ''
+}
+
+function handleOriginClear() {
+  locationAutoFillState.userTouchedOrigin = true
+  errors.origin = ''
 }
 
 function handleNext() {
@@ -510,6 +526,60 @@ function toggleAvoidance(a) {
   const idx = form.avoidances.indexOf(a)
   if (idx >= 0) form.avoidances.splice(idx, 1)
   else form.avoidances.push(a)
+}
+
+function normalizeCityTree(raw) {
+  if (!Array.isArray(raw)) return []
+  return raw
+    .map((province, provinceIndex) => {
+      const citys = Array.isArray(province?.citys)
+        ? province.citys.map((city, cityIndex) => {
+          const seen = new Set()
+          const areas = []
+          for (const area of Array.isArray(city?.areas) ? city.areas : []) {
+            const name = String(area?.area || '').trim()
+            if (!name || seen.has(name)) continue
+            seen.add(name)
+            areas.push({ area: name })
+          }
+          if (!areas.length && city?.city) {
+            areas.push({ area: String(city.city).trim() })
+          }
+          return {
+            id: `${provinceIndex}-${cityIndex}-${city?.city || 'city'}`,
+            city: String(city?.city || '').trim(),
+            areas,
+          }
+        }).filter(item => item.city)
+        : []
+
+      return {
+        id: `${provinceIndex}-${province?.province || 'province'}`,
+        province: String(province?.province || '').trim(),
+        citys,
+      }
+    })
+    .filter(item => item.province)
+}
+
+async function ensureCityTree() {
+  if (cityTree.value.length) return cityTree.value
+  if (!cityTreePromise) {
+    cityTreePromise = fetch(`${import.meta.env.BASE_URL}city.json`)
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`加载城市数据失败：${response.status}`)
+        }
+        const data = await response.json()
+        return normalizeCityTree(data)
+      })
+      .catch((error) => {
+        cityTreePromise = null
+        throw error
+      })
+  }
+  cityTree.value = await cityTreePromise
+  return cityTree.value
 }
 
 // Streaming
@@ -859,6 +929,101 @@ async function fetchRecentRecords() {
   } catch { /* keep stale list */ }
 }
 
+function stripAdministrativeSuffix(value) {
+  return String(value || '').replace(/[省市自治区特别行政区自治州地区盟县区旗]+$/u, '')
+}
+
+function normalizeCityPart(value) {
+  return stripAdministrativeSuffix(value).trim()
+}
+
+function findProvinceByName(name) {
+  const normalized = normalizeCityPart(name)
+  return cityTree.value.find(item => {
+    const province = normalizeCityPart(item.province)
+    return item.province === name || province === normalized
+  }) || null
+}
+
+function findCityByName(provinceItem, cityName) {
+  if (!provinceItem) return null
+  const normalized = normalizeCityPart(cityName)
+  return provinceItem.citys.find(item => {
+    const city = normalizeCityPart(item.city)
+    return item.city === cityName || city === normalized
+  }) || null
+}
+
+function findCountyByName(cityItem, countyName) {
+  if (!cityItem) return ''
+  const normalized = normalizeCityPart(countyName)
+  const county = (cityItem.areas || []).find(item => {
+    const raw = typeof item === 'string' ? item : item?.area
+    if (!raw) return false
+    const areaName = normalizeCityPart(raw)
+    return raw === countyName || areaName === normalized
+  })
+  return typeof county === 'string' ? county : (county?.area || '')
+}
+
+function cityPathFromReverseGeocode(payload) {
+  const provinceName = String(payload?.province || '').trim()
+  const cityName = String(payload?.city || '').trim()
+  const districtName = String(payload?.district || '').trim()
+  const provinceItem = findProvinceByName(provinceName) || (cityName ? findProvinceByName(cityName) : null)
+  if (!provinceItem) return null
+
+  const cityItem = findCityByName(provinceItem, cityName || provinceItem.province)
+    || findCityByName(provinceItem, provinceItem.province)
+    || provinceItem.citys[0]
+    || null
+  if (!cityItem) return null
+
+  const countyName = findCountyByName(cityItem, districtName)
+    || findCountyByName(cityItem, cityItem.city)
+  if (!countyName) return null
+
+  return [provinceItem.province, cityItem.city, countyName]
+}
+
+async function reverseGeocodeLocation(location) {
+  const res = await planningApi.reverseGeocode({ location })
+  return res.data || {}
+}
+
+async function autoFillOriginFromCurrentPosition() {
+  if (locationAutoFillState.requested || locationAutoFillState.resolved || locationAutoFillState.userTouchedOrigin || form.origin.trim()) {
+    return
+  }
+  if (!navigator.geolocation) return
+  locationAutoFillState.requested = true
+  await new Promise((resolve) => {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const location = `${position.coords.longitude},${position.coords.latitude}`
+          const reverse = await reverseGeocodeLocation(location)
+          const path = cityPathFromReverseGeocode(reverse)
+          if (path && !locationAutoFillState.userTouchedOrigin && !form.origin.trim()) {
+            form.origin = path.join(' / ')
+            locationAutoFillState.resolved = true
+          }
+        } catch {
+          // ignore auto-fill failures
+        } finally {
+          resolve()
+        }
+      },
+      () => resolve(),
+      {
+        enableHighAccuracy: false,
+        timeout: 5000,
+        maximumAge: 10 * 60 * 1000,
+      },
+    )
+  })
+}
+
 async function downloadRouteMap() {
   const url = routeMapImage.value
   if (!url) return
@@ -878,6 +1043,12 @@ async function downloadRouteMap() {
 
 onMounted(async () => {
   if (!auth.isAuthenticated) await auth.initGuestSession()
+  try {
+    await ensureCityTree()
+    await autoFillOriginFromCurrentPosition()
+  } catch {
+    // auto-fill is optional
+  }
 })
 </script>
 
@@ -1302,11 +1473,15 @@ onMounted(async () => {
   font-size: $font-size-body;
   font-weight: 600;
   color: $text-primary;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .ci-sub {
   font-size: $font-size-sm;
   color: $text-secondary;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .confirm-error {

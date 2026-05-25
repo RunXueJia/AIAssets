@@ -574,7 +574,7 @@ class AiPlanningService:
         for query in queries:
             data = await self.amap_service.search_places(
                 keyword=query,
-                city=self._route_search_city(request),
+                city=self._route_search_city(request, route=route),
             )
             results.append(
                 {
@@ -677,9 +677,10 @@ class AiPlanningService:
         destination = request.destination.strip()
         origin_location = self._location_from_route(route, "origin")
         destination_location = self._location_from_route(route, "destination")
+        endpoint_threshold = self._endpoint_exclusion_radius(route)
         resolved: list[dict[str, Any]] = []
         seen_locations: set[str] = set()
-        city = self._route_search_city(request)
+        city = self._route_search_city(request, route=route)
         for candidate in self._web_waypoint_candidates(
             request=request,
             web_items=web_items,
@@ -696,7 +697,12 @@ class AiPlanningService:
                     continue
                 if self._poi_matches_endpoint(name, origin=origin, destination=destination):
                     continue
-                if self._near_endpoint(location, origin_location, destination_location):
+                if self._near_endpoint(
+                    location,
+                    origin_location,
+                    destination_location,
+                    threshold=endpoint_threshold,
+                ):
                     continue
                 if not self._is_route_waypoint_poi(poi, query=query):
                     continue
@@ -809,10 +815,16 @@ class AiPlanningService:
         suffix_pattern = (
             r"[\u4e00-\u9fffA-Za-z0-9·-]{2,24}"
             r"(?:景区|公园|博物馆|纪念馆|湿地|古镇|古村|广场|观景台|文化园|风景区)"
+            r"(?:外围|周边|附近|一带|沿线)?"
         )
-        for match in re.finditer(suffix_pattern, text):
+        route_place_pattern = (
+            r"[\u4e00-\u9fffA-Za-z0-9·-]{2,18}"
+            r"(?:环湖段|江北新区|新区|县|镇|古镇|湖|山|岛|河|岸|岭|湾|洲|村)"
+            r"(?:外围|周边|附近|一带|沿线)?"
+        )
+        for match in re.finditer(f"{suffix_pattern}|{route_place_pattern}", text):
             names.append(match.group(0))
-        for chunk in re.split(r"[：:、，,；;|/()\[\]【】\n\r]", text):
+        for chunk in re.split(r"[：:、，,；;|/()\[\]【】\n\r]|(?:\s*(?:→|->|－|—|–)\s*)", text):
             normalized = self._clean_waypoint_name(chunk)
             if normalized and len(normalized) <= 20:
                 names.append(normalized)
@@ -825,12 +837,50 @@ class AiPlanningService:
             "必经景点",
             "推荐景点",
         }
-        route_words = ("路线", "攻略", "推荐", "沿途", "途经", "途径", "起点", "终点")
+        route_words = (
+            "路线",
+            "攻略",
+            "推荐",
+            "沿途",
+            "途经",
+            "途径",
+            "起点",
+            "终点",
+            "出发",
+            "高德",
+            "百度",
+            "地图",
+            "导航",
+            "高速",
+            "国道",
+            "省道",
+            "县道",
+            "限行",
+            "禁行",
+            "停车",
+            "补给",
+            "休整",
+            "注意事项",
+            "通行规则",
+            "Mock",
+            "摘要",
+            "相关",
+            "提醒",
+            "参考",
+        )
         result = []
         for name in names:
             if name in blocked:
                 continue
+            if self._poi_matches_endpoint(
+                name,
+                origin=request.origin.strip(),
+                destination=request.destination.strip(),
+            ):
+                continue
             if any(word in name for word in route_words):
+                continue
+            if not self._looks_like_waypoint_name(name):
                 continue
             if name not in result:
                 result.append(name)
@@ -841,6 +891,13 @@ class AiPlanningService:
             return ""
         value = value.strip()
         value = re.sub(r"^[\s\d.、:：-]+|[\s.。；;，,]+$", "", value)
+        value = re.sub(
+            r"^(?:可安排|安排|推荐|建议|可先|先到|再到|继续|经过|路过|绕行|走)\s*",
+            "",
+            value,
+        )
+        value = re.sub(r"(?:作为短暂停留点|作为停靠点|短暂停留|拍照|补水|休整)$", "", value)
+        value = re.sub(r"(?:外围|周边|附近|一带|沿线)$", "", value)
         return value.strip()
 
     def _route_waypoint_queries(self, request: GenerateStreamRequest) -> list[str]:
@@ -856,7 +913,14 @@ class AiPlanningService:
             base_queries.insert(1, f"{origin} 到 {destination} {preference_text} 景点")
         return list(dict.fromkeys(query for query in base_queries if query.strip()))[:4]
 
-    def _route_search_city(self, request: GenerateStreamRequest) -> str | None:
+    def _route_search_city(
+        self,
+        request: GenerateStreamRequest,
+        *,
+        route: dict[str, Any] | None = None,
+    ) -> str | None:
+        if route is not None and self._is_long_distance_route(route):
+            return None
         destination = request.destination.strip()
         city = self._city_token(destination)
         return city or destination or None
@@ -880,9 +944,10 @@ class AiPlanningService:
         destination = request.destination.strip()
         origin_location = self._location_from_route(route, "origin")
         destination_location = self._location_from_route(route, "destination")
+        endpoint_threshold = self._endpoint_exclusion_radius(route)
         items: list[dict[str, Any]] = []
         seen_locations: set[str] = set()
-        for result in query_results:
+        for result in self._ordered_waypoint_query_results(query_results):
             query = str(result.get("query") or "")
             for raw in result.get("items") or []:
                 if not isinstance(raw, dict):
@@ -897,7 +962,19 @@ class AiPlanningService:
                     continue
                 if self._poi_matches_endpoint(name, origin=origin, destination=destination):
                     continue
-                if self._near_endpoint(location, origin_location, destination_location):
+                if self._is_destination_city_poi(
+                    raw,
+                    request=request,
+                    route=route,
+                    source=str(result.get("source") or ""),
+                ):
+                    continue
+                if self._near_endpoint(
+                    location,
+                    origin_location,
+                    destination_location,
+                    threshold=endpoint_threshold,
+                ):
                     continue
                 seen_locations.add(location)
                 items.append(
@@ -917,6 +994,15 @@ class AiPlanningService:
                 if len(items) >= 5:
                     return items
         return items
+
+    def _ordered_waypoint_query_results(
+        self,
+        query_results: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        return sorted(
+            query_results,
+            key=lambda item: 0 if item.get("source") == "web_search" else 1,
+        )
 
     def _waypoint_source_types(self, results: list[dict[str, Any]]) -> list[str]:
         values = [
@@ -971,7 +1057,88 @@ class AiPlanningService:
     ) -> bool:
         if not name:
             return False
-        return name in {origin, destination} or origin in name or destination in name
+        if name in {origin, destination}:
+            return True
+        for endpoint in [origin, destination]:
+            if not self._is_specific_endpoint_name(endpoint):
+                continue
+            if endpoint in name:
+                return True
+            if len(name) >= 3 and name in endpoint:
+                return True
+        return False
+
+    def _is_specific_endpoint_name(self, value: str) -> bool:
+        value = value.strip()
+        if len(value) < 4:
+            return False
+        return not value.endswith(("省", "市", "县", "区", "州", "盟"))
+
+    def _looks_like_waypoint_name(self, name: str) -> bool:
+        if len(name) < 2 or len(name) > 18:
+            return False
+        if not re.search(r"[\u4e00-\u9fff]", name):
+            return False
+        blocked_parts = (
+            "早上",
+            "中午",
+            "下午",
+            "晚上",
+            "一天",
+            "小时",
+            "公里",
+            "避开",
+            "确认",
+            "提前",
+            "再次",
+            "优先",
+            "适合",
+            "不要",
+            "不必",
+        )
+        return not any(part in name for part in blocked_parts)
+
+    def _is_destination_city_poi(
+        self,
+        item: dict[str, Any],
+        *,
+        request: GenerateStreamRequest,
+        route: dict[str, Any],
+        source: str,
+    ) -> bool:
+        if source == "web_search" or not self._is_long_distance_route(route):
+            return False
+        destination_city_tokens = self._destination_city_tokens(request.destination)
+        if not destination_city_tokens:
+            return False
+        text = " ".join(
+            str(item.get(key) or "")
+            for key in ("name", "address", "city_name", "adname", "province_name")
+        )
+        return any(token and token in text for token in destination_city_tokens)
+
+    def _destination_city_tokens(self, destination: str) -> list[str]:
+        destination = destination.strip()
+        city = self._city_token(destination)
+        tokens = [city] if city else []
+        if re.fullmatch(r"[\u4e00-\u9fff]{2,4}", destination):
+            tokens.extend([destination, f"{destination}市"])
+        return list(dict.fromkeys(token for token in tokens if token))
+
+    def _is_long_distance_route(self, route: dict[str, Any]) -> bool:
+        distance_m = route.get("distance_m")
+        if isinstance(distance_m, int | float) and distance_m >= 80_000:
+            return True
+        origin_location = self._location_from_route(route, "origin")
+        destination_location = self._location_from_route(route, "destination")
+        if origin_location and destination_location:
+            return self._coordinate_distance(origin_location, destination_location) >= 0.7
+        return False
+
+    def _endpoint_exclusion_radius(self, route: dict[str, Any] | None) -> float:
+        if route is not None and self._is_long_distance_route(route):
+            return 0.12
+        return 0.003
 
     async def _realtime_context(self, request: GenerateStreamRequest) -> dict[str, Any]:
         keyword = f"{request.destination} {request.range}".strip()
@@ -1382,6 +1549,7 @@ class AiPlanningService:
         destination = request.destination.strip()
         origin_location = self._location_from_route(route or {}, "origin")
         destination_location = self._location_from_route(route or {}, "destination")
+        endpoint_threshold = self._endpoint_exclusion_radius(route or {})
         locations: list[str] = []
         seen: set[str] = set()
         for item in attractions.get("items") or []:
@@ -1393,7 +1561,12 @@ class AiPlanningService:
                 continue
             if name and name in {origin, destination}:
                 continue
-            if self._near_endpoint(location, origin_location, destination_location):
+            if self._near_endpoint(
+                location,
+                origin_location,
+                destination_location,
+                threshold=endpoint_threshold,
+            ):
                 continue
             if location in seen:
                 continue
@@ -1406,9 +1579,11 @@ class AiPlanningService:
         location: str,
         origin_location: str | None,
         destination_location: str | None,
+        *,
+        threshold: float = 0.003,
     ) -> bool:
         return any(
-            endpoint is not None and self._coordinate_distance(location, endpoint) < 0.003
+            endpoint is not None and self._coordinate_distance(location, endpoint) < threshold
             for endpoint in [origin_location, destination_location]
         )
 

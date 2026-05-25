@@ -211,6 +211,120 @@ class WebWaypointRealtimeClient(MockRealtimeClient):
         return await super().search(keyword=keyword, category=category, limit=limit)
 
 
+class IntercityAmapClient(WaypointAmapClient):
+    async def search_places(self, *, keyword: str, city: str | None = None):
+        if keyword == "合肥":
+            return {
+                "items": [
+                    {
+                        "name": "合肥市",
+                        "location": "117.227239,31.820586",
+                        "type": "地名地址信息",
+                        "city_name": "合肥市",
+                    }
+                ],
+                "source_updated_at": "2026-05-22T10:00:00+08:00",
+                "mock": True,
+                "provider": self.provider,
+            }
+        if keyword == "南京":
+            return {
+                "items": [
+                    {
+                        "name": "南京市",
+                        "location": "118.796877,32.060255",
+                        "type": "地名地址信息",
+                        "city_name": "南京市",
+                    }
+                ],
+                "source_updated_at": "2026-05-22T10:00:00+08:00",
+                "mock": True,
+                "provider": self.provider,
+            }
+        if keyword in {"巢湖", "和县", "来安"}:
+            locations = {
+                "巢湖": "117.880490,31.608733",
+                "和县": "118.351405,31.741794",
+                "来安": "118.435718,32.452199",
+            }
+            return {
+                "items": [
+                    {
+                        "name": keyword,
+                        "location": locations[keyword],
+                        "type": "风景名胜;沿途途径点",
+                        "address": f"{keyword}沿途停靠点",
+                        "city_name": "",
+                    }
+                ],
+                "source_updated_at": "2026-05-22T10:00:00+08:00",
+                "mock": True,
+                "provider": self.provider,
+            }
+        if "合肥" in keyword and "南京" in keyword:
+            return {
+                "items": [
+                    {
+                        "name": "玄武湖景区",
+                        "location": "118.796500,32.071200",
+                        "type": "风景名胜;景区",
+                        "address": "南京市玄武区玄武巷",
+                        "city_name": "南京市",
+                        "adname": "玄武区",
+                    },
+                    {
+                        "name": "总统府",
+                        "location": "118.792400,32.043900",
+                        "type": "风景名胜;纪念馆",
+                        "address": "南京市玄武区长江路",
+                        "city_name": "南京市",
+                        "adname": "玄武区",
+                    },
+                    {
+                        "name": "夫子庙秦淮风光带",
+                        "location": "118.788500,32.020900",
+                        "type": "风景名胜;景区",
+                        "address": "南京市秦淮区",
+                        "city_name": "南京市",
+                        "adname": "秦淮区",
+                    },
+                ],
+                "source_updated_at": "2026-05-22T10:00:00+08:00",
+                "mock": True,
+                "provider": self.provider,
+            }
+        return await super().search_places(keyword=keyword, city=city)
+
+    async def calculate_route(self, *, waypoints: list[str], **kwargs):
+        self.route_waypoints = waypoints
+        data = await super().calculate_route(waypoints=waypoints, **kwargs)
+        data["origin_location"] = "117.227239,31.820586"
+        data["destination_location"] = "118.796877,32.060255"
+        data["distance_m"] = 250000
+        data["duration_s"] = 21600
+        data["route_summary"] = "约250.0公里，预计360分钟"
+        data["route_path_points"] = []
+        data["route_waypoints_source"] = "route_path"
+        data["requested_waypoints"] = waypoints
+        return data
+
+
+class IntercityRealtimeClient(MockRealtimeClient):
+    async def search(self, *, keyword: str, category: str, limit: int):
+        if category == "guide" and "合肥" in keyword and "南京" in keyword:
+            return [
+                {
+                    "title": "合肥到南京摩托小众风光线",
+                    "url": "https://example.com/hefei-nanjing",
+                    "source": "example.com",
+                    "published_at": "2026-05-22T09:00:00+08:00",
+                    "summary": "推荐合肥经巢湖、和县、来安再进入南京，避开主城拥堵。",
+                    "raw": {"waypoint_candidates": ["巢湖", "和县", "来安"]},
+                }
+            ][:limit]
+        return await super().search(keyword=keyword, category=category, limit=limit)
+
+
 class FailingAmapClient(MockAmapClient):
     async def calculate_route(self, **_kwargs):  # noqa: ANN003
         raise RuntimeError("RESULTS_ARE_EMPTY")
@@ -421,6 +535,47 @@ def test_ai_planning_merges_web_search_waypoints_into_navigation_export() -> Non
     ]
     assert amap_client.export_waypoints == [expected_location]
     assert "导航途径点：明城墙台城景区（全网）。" in result.final_markdown
+
+
+def test_ai_planning_prefers_intercity_web_waypoints_over_destination_city_pois() -> None:
+    amap_client = IntercityAmapClient()
+    service = AiPlanningService(
+        weather_service=WeatherService(client=MockWeatherClient()),
+        amap_service=AmapService(client=amap_client),
+        realtime_service=RealtimeService(client=IntercityRealtimeClient()),
+    )
+    request = GenerateStreamRequest(
+        origin="合肥",
+        destination="南京",
+        range="一天",
+        transport_mode="motorcycle",
+        preferences=["自然风光", "小众路线"],
+    )
+
+    result = asyncio.run(service.build_result(108, request))
+
+    expected_locations = [
+        "117.880490,31.608733",
+        "118.351405,31.741794",
+        "118.435718,32.452199",
+    ]
+    assert amap_client.route_waypoints == expected_locations
+    assert result.context.map_export["navigation_waypoints"] == expected_locations
+    assert [item["name"] for item in result.context.map_export["navigation_waypoint_items"]] == [
+        "巢湖",
+        "和县",
+        "来安",
+    ]
+    assert {item["source"] for item in result.context.map_export["navigation_waypoint_items"]} == {
+        "web_search"
+    }
+    navigation_names = [item["name"] for item in amap_client.link_waypoint_calls[0]]
+    assert navigation_names == ["巢湖", "和县", "来安"]
+    assert "玄武湖景区" not in navigation_names
+    assert "总统府" not in navigation_names
+    assert "夫子庙秦淮风光带" not in navigation_names
+    assert amap_client.export_waypoints == expected_locations
+    assert "导航途径点：巢湖（全网）、和县（全网）、来安（全网）。" in result.final_markdown
 
 
 def test_ai_planning_degrades_when_amap_route_is_empty() -> None:

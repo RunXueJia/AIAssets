@@ -5,6 +5,10 @@ function accessToken() {
 }
 
 export const planningApi = {
+  reverseGeocode(data) {
+    return http.post('/api/v1/amap/reverse_geocode', data)
+  },
+
   generateStream(data) {
     // Returns fetch response for SSE parsing
     const auth = accessToken()

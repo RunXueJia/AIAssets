@@ -32,6 +32,33 @@ class MockAmapClient:
             "provider": self.provider,
         }
 
+    async def reverse_geocode(
+        self,
+        *,
+        location: str,
+    ) -> dict[str, Any]:
+        province, city, district = _mock_reverse_parts(location)
+        return {
+            "province": province,
+            "city": city,
+            "district": district,
+            "adcode": "000000",
+            "citycode": "000",
+            "formatted_address": " ".join(part for part in [province, city, district] if part),
+            "province_city_district": " ".join(
+                part for part in [province, city, district] if part
+            ),
+            "source_updated_at": _iso_now(),
+            "mock": True,
+            "provider": self.provider,
+            "raw": {
+                "location": location,
+                "province": province,
+                "city": city,
+                "district": district,
+            },
+        }
+
     async def calculate_route(
         self,
         *,
@@ -172,6 +199,14 @@ def _normalize_waypoint(waypoint: str | dict[str, Any]) -> dict[str, str] | None
     if not location or "," not in location:
         return None
     return {"location": location, "name": str(waypoint.get("name") or "").strip()}
+
+
+def _mock_reverse_parts(location: str) -> tuple[str, str, str]:
+    if location.startswith("120.21201,30.29191"):
+        return "浙江省", "杭州市", "上城区"
+    if location.startswith("120.143222,30.236064"):
+        return "浙江省", "杭州市", "西湖区"
+    return "示例省", "示例市", "示例区"
 
 
 def _uri_transport_mode(transport_mode: str) -> str:

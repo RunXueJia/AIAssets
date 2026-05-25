@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from app.api.v1.endpoints import amap
-from app.core.auth import require_admin_actor
+from app.core.auth import get_current_actor, require_admin_actor
 from app.core.exceptions import register_exception_handlers
 from app.integrations.amap import (
     AmapWebServiceClient,
@@ -15,6 +15,7 @@ from app.integrations.amap import (
 from app.integrations.amap.client import AmapClientError
 from app.schemas.amap import (
     AmapExportRouteMapRequest,
+    AmapReverseGeocodeRequest,
     AmapRouteLinkRequest,
     AmapRouteRequest,
 )
@@ -30,6 +31,10 @@ def _client(*, authenticated: bool = True) -> tuple[TestClient, object]:
     app.include_router(amap.router, prefix="/api/v1")
     if authenticated:
         app.dependency_overrides[require_admin_actor] = lambda: RecordActor(
+            user_id=1,
+            role="admin",
+        )
+        app.dependency_overrides[get_current_actor] = lambda: RecordActor(
             user_id=1,
             role="admin",
         )
@@ -97,6 +102,18 @@ def test_mock_amap_client_supports_search_route_link_and_export_contracts() -> N
     assert data["export"]["height"] == 500
 
 
+def test_mock_amap_client_supports_reverse_geocode_contract() -> None:
+    client = MockAmapClient()
+
+    data = asyncio.run(client.reverse_geocode(location="120.21201,30.29191"))
+
+    assert data["province"]
+    assert data["city"]
+    assert data["district"]
+    assert data["province_city_district"]
+    assert data["mock"] is True
+
+
 def test_amap_web_service_client_parses_poi_and_route_payloads() -> None:
     client = AmapWebServiceClient(api_key="test")
     poi_payload = {
@@ -157,6 +174,38 @@ def test_amap_web_service_client_parses_poi_and_route_payloads() -> None:
     ]
     assert data["route"]["waypoints"] == ["120.180000,30.270000"]
     assert data["route"]["route_waypoints_source"] == "route_path"
+
+
+def test_amap_web_service_client_parses_reverse_geocode_payload() -> None:
+    client = AmapWebServiceClient(api_key="test")
+    reverse_payload = {
+        "status": "1",
+        "regeocode": {
+            "formatted_address": "浙江省杭州市西湖区",
+            "addressComponent": {
+                "province": "浙江省",
+                "city": "杭州市",
+                "district": "西湖区",
+                "adcode": "330106",
+                "citycode": "0571",
+            },
+        },
+    }
+
+    async def collect() -> dict:
+        async def fake_request(scope, endpoint, params):  # noqa: ANN001
+            return reverse_payload
+
+        client._cached_request = fake_request  # type: ignore[method-assign]
+        return await client.reverse_geocode(location="120.143222,30.236064")
+
+    data = asyncio.run(collect())
+
+    assert data["province"] == "浙江省"
+    assert data["city"] == "杭州市"
+    assert data["district"] == "西湖区"
+    assert data["province_city_district"] == "浙江省 杭州市 西湖区"
+    assert data["mock"] is False
 
 
 def test_amap_web_service_client_resolves_place_names_before_route_request() -> None:
@@ -387,6 +436,10 @@ def test_amap_api_contract_uses_service_layer() -> None:
     client, original_service = _client()
     try:
         search_response = client.get("/api/v1/amap/search_places?keyword=西湖&city=杭州")
+        reverse_response = client.post(
+            "/api/v1/amap/reverse_geocode",
+            json={"location": "120.21201,30.29191"},
+        )
         route_response = client.post(
             "/api/v1/amap/calculate_route",
             json={
@@ -414,6 +467,9 @@ def test_amap_api_contract_uses_service_layer() -> None:
         assert search_response.status_code == 200
         assert search_response.json()["data"]["items"][0]["location"]
         assert search_response.json()["data"]["provider"] == "mock"
+        assert reverse_response.status_code == 200
+        assert reverse_response.json()["data"]["province"] == "浙江省"
+        assert reverse_response.json()["data"]["city"] == "杭州市"
         assert route_response.status_code == 200
         assert route_response.json()["data"]["distance_m"] == 12800
         assert link_response.status_code == 200
@@ -430,7 +486,12 @@ def test_amap_api_requires_admin_authentication() -> None:
     client, original_service = _client(authenticated=False)
     try:
         response = client.get("/api/v1/amap/search_places?keyword=西湖&city=杭州")
+        reverse_response = client.post(
+            "/api/v1/amap/reverse_geocode",
+            json={"location": "120.21201,30.29191"},
+        )
 
         assert response.status_code == 401
+        assert reverse_response.status_code == 401
     finally:
         amap.service = original_service

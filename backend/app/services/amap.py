@@ -1,16 +1,20 @@
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from app.core.config import get_settings
-from app.integrations.amap import AmapClientProtocol, create_amap_client
+from app.integrations.amap import AmapClientError, AmapClientProtocol, create_amap_client
 from app.schemas.amap import (
     AmapExportRouteMapRequest,
     AmapExportRouteMapResponse,
+    AmapReverseGeocodeResponse,
     AmapRouteLinkRequest,
     AmapRouteLinkResponse,
     AmapRouteRequest,
     AmapRouteResponse,
     AmapSearchPlacesResponse,
 )
+
+APP_TZ = timezone(timedelta(hours=8))
 
 
 class AmapService:
@@ -25,6 +29,20 @@ class AmapService:
     ) -> dict[str, Any]:
         data = await self.client.search_places(keyword=keyword, city=self._blank_to_none(city))
         return AmapSearchPlacesResponse.model_validate(data).model_dump(mode="json")
+
+    async def reverse_geocode(self, *, location: str) -> dict[str, Any]:
+        try:
+            data = await self.client.reverse_geocode(location=location)
+            return AmapReverseGeocodeResponse.model_validate(data).model_dump(mode="json")
+        except (AmapClientError, TypeError, ValueError) as exc:
+            provider = getattr(self.client, "provider", None)
+            mock = bool(getattr(self.client, "mock", False))
+            return AmapReverseGeocodeResponse(
+                source_updated_at=self._now_iso(),
+                provider=provider,
+                mock=mock,
+                fallback_reason=str(exc),
+            ).model_dump(mode="json")
 
     async def calculate_route(self, payload: AmapRouteRequest) -> dict[str, Any]:
         data = await self.client.calculate_route(
@@ -78,3 +96,6 @@ class AmapService:
             for key, item in value.items()
             if key in {"name", "location"} and item is not None
         }
+
+    def _now_iso(self) -> str:
+        return datetime.now(APP_TZ).isoformat()

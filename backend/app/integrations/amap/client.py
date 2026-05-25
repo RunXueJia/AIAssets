@@ -22,6 +22,12 @@ class AmapClientProtocol(Protocol):
         city: str | None = None,
     ) -> dict[str, Any]: ...
 
+    async def reverse_geocode(
+        self,
+        *,
+        location: str,
+    ) -> dict[str, Any]: ...
+
     async def calculate_route(
         self,
         *,
@@ -80,6 +86,7 @@ class AmapWebServiceClient:
         self.bicycling_endpoint = "https://restapi.amap.com/v5/direction/bicycling"
         self.electrobike_endpoint = "https://restapi.amap.com/v5/direction/electrobike"
         self.static_map_endpoint = "https://restapi.amap.com/v3/staticmap"
+        self.regeocode_endpoint = "https://restapi.amap.com/v3/geocode/regeo"
 
     async def search_places(
         self,
@@ -118,6 +125,46 @@ class AmapWebServiceClient:
             "source_updated_at": _iso_now(),
             "mock": False,
             "provider": self.provider,
+        }
+
+    async def reverse_geocode(
+        self,
+        *,
+        location: str,
+    ) -> dict[str, Any]:
+        if not self._is_location(location):
+            raise AmapClientError("逆地理编码需要有效经纬度")
+        params: dict[str, Any] = {
+            "location": location,
+            "extensions": "all",
+            "radius": "1000",
+            "roadlevel": "0",
+        }
+        payload = await self._cached_request("regeocode", self.regeocode_endpoint, params)
+        regeocode = payload.get("regeocode")
+        if not isinstance(regeocode, dict):
+            raise AmapClientError("高德逆地理编码未返回结果")
+        address = regeocode.get("addressComponent")
+        if not isinstance(address, dict):
+            raise AmapClientError("高德逆地理编码未返回地址组件")
+        province = str(address.get("province") or "")
+        city = str(address.get("city") or "")
+        district = str(address.get("district") or "")
+        adcode = str(address.get("adcode") or "")
+        citycode = str(address.get("citycode") or "")
+        formatted_address = str(regeocode.get("formatted_address") or "")
+        return {
+            "province": province,
+            "city": city,
+            "district": district,
+            "adcode": adcode,
+            "citycode": citycode,
+            "formatted_address": formatted_address,
+            "province_city_district": self._join_parts(province, city, district),
+            "source_updated_at": _iso_now(),
+            "mock": False,
+            "provider": self.provider,
+            "raw": payload,
         }
 
     async def calculate_route(
@@ -503,6 +550,9 @@ class AmapWebServiceClient:
         if isinstance(value, list):
             return "".join(str(item) for item in value)
         return str(value or "")
+
+    def _join_parts(self, *parts: str) -> str:
+        return " ".join(part for part in parts if part)
 
     def _nested_value(self, data: dict[str, Any], *keys: str) -> Any:
         value: Any = data

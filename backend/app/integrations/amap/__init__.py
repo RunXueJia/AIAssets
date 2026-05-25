@@ -1,4 +1,5 @@
 from app.integrations.amap.client import (
+    AmapClientError,
     AmapClientProtocol,
     AmapRealClient,
     AmapWebServiceClient,
@@ -7,6 +8,7 @@ from app.integrations.amap.client import (
 from app.integrations.amap.mock import MockAmapClient
 
 __all__ = [
+    "AmapClientError",
     "AmapClientProtocol",
     "AmapRealClient",
     "AmapWebServiceClient",
