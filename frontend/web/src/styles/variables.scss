@@ -1,30 +1,38 @@
-// RouteCraft calm lifestyle planning palette
-$page-bg: #f6f2eb;
-$surface-soft: #fbf8f3;
-$surface-muted: #f0eadf;
-$content-bg: #ffffff;
-$text-primary: #20201d;
-$text-secondary: #696761;
-$text-hint: #9d988d;
-$border-light: #e5ded1;
-$border-card: #eee7dc;
-$color-primary: #d85f3f;
-$color-primary-light: #e87855;
-$color-primary-dark: #a94731;
-$color-primary-bg: rgba(216, 95, 63, 0.1);
-$color-success: #2f8d67;
-$color-warning: #b66f18;
-$color-danger: #c94a3a;
-$color-link: #3a6794;
-$color-blue: #39759d;
-$color-mint: #4b8f7b;
-$color-ink: #2f312c;
+// RouteCraft neumorphic soft UI palette
+$page-bg: #e0e5ec;
+$surface-soft: #e0e5ec;
+$surface-muted: #d5dbe4;
+$content-bg: #e0e5ec;
+$text-primary: #2f3742;
+$text-secondary: #647181;
+$text-hint: #9aa6b6;
+$border-light: rgba(255, 255, 255, 0.42);
+$border-card: rgba(163, 177, 198, 0.2);
+$color-primary: #6d7f95;
+$color-primary-light: #ffffff;
+$color-primary-dark: #4e6074;
+$color-primary-bg: rgba(109, 127, 149, 0.12);
+$color-success: #4d8c70;
+$color-warning: #a77a42;
+$color-danger: #b76058;
+$color-link: #476a8f;
+$color-blue: #6c86a1;
+$color-mint: #6f9b8f;
+$color-ink: #26303b;
 
 // Shadows
-$shadow-sm: 0 1px 2px rgba(47, 49, 44, 0.05), 0 1px 6px rgba(47, 49, 44, 0.04);
-$shadow-md: 0 10px 28px rgba(47, 49, 44, 0.08);
-$shadow-lg: 0 22px 54px rgba(47, 49, 44, 0.12);
-$shadow-card: 0 12px 32px rgba(47, 49, 44, 0.07), 0 1px 0 rgba(255, 255, 255, 0.76) inset;
+$shadow-sm:
+  -5px -5px 11px rgba(255, 255, 255, 0.72),
+  5px 5px 11px rgba(163, 177, 198, 0.38);
+$shadow-md:
+  -9px -9px 18px rgba(255, 255, 255, 0.72),
+  9px 9px 18px rgba(163, 177, 198, 0.42);
+$shadow-lg:
+  -14px -14px 28px rgba(255, 255, 255, 0.74),
+  14px 14px 28px rgba(163, 177, 198, 0.46);
+$shadow-card:
+  -12px -12px 24px rgba(255, 255, 255, 0.72),
+  12px 12px 24px rgba(163, 177, 198, 0.44);
 
 // Layout
 $nav-height: 64px;
@@ -33,10 +41,10 @@ $input-panel-width: 400px;
 $tab-height: 64px;
 
 // Radius
-$radius-sm: 8px;
-$radius-md: 12px;
-$radius-lg: 16px;
-$radius-xl: 22px;
+$radius-sm: 6px;
+$radius-md: 8px;
+$radius-lg: 10px;
+$radius-xl: 12px;
 
 // Font
 $font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Microsoft YaHei", sans-serif;

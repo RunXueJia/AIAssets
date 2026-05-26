@@ -10,10 +10,7 @@ html {
   font-family: $font-family;
   font-size: 16px;
   color: $text-primary;
-  background:
-    radial-gradient(circle at 14% -10%, rgba($color-primary-light, 0.16), transparent 28rem),
-    radial-gradient(circle at 92% 6%, rgba($color-mint, 0.13), transparent 24rem),
-    $page-bg;
+  background: $page-bg;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-tap-highlight-color: transparent;
@@ -24,7 +21,16 @@ body {
   min-height: 100vh;
   line-height: $line-height-body;
   font-size: $font-size-body;
-  background: transparent;
+  background: $page-bg;
+}
+
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  content: "";
+  background: none;
 }
 
 a {
@@ -46,8 +52,18 @@ a,
 }
 
 :focus-visible {
-  outline: 3px solid rgba($color-primary, 0.24);
+  outline: 3px solid rgba(255, 255, 255, 0.42);
   outline-offset: 3px;
+}
+
+.neu-pressed {
+  transform: translateY(1px) scale(0.99) !important;
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42) !important;
+  transition:
+    transform 0.08s ease-out,
+    box-shadow 0.08s ease-out !important;
 }
 
 // Scrollbar
@@ -57,7 +73,7 @@ a,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba($text-primary, 0.14);
+  background: rgba($color-primary-light, 0.2);
   border-radius: 999px;
   border: 2px solid transparent;
   background-clip: content-box;
@@ -69,24 +85,33 @@ a,
 
 // Reset Element Plus styles to match design system
 .el-button--primary {
-  --el-button-bg-color: #{$color-primary};
-  --el-button-border-color: #{$color-primary};
-  --el-button-hover-bg-color: #{$color-primary-light};
-  --el-button-hover-border-color: #{$color-primary-light};
-  --el-button-active-bg-color: #{$color-primary};
-  --el-button-active-border-color: #{$color-primary};
-  border-radius: 999px;
-  font-weight: 650;
-  box-shadow: 0 12px 24px rgba($color-primary, 0.18);
+  --el-button-bg-color: #{$content-bg};
+  --el-button-border-color: transparent;
+  --el-button-hover-bg-color: #{$content-bg};
+  --el-button-hover-border-color: transparent;
+  --el-button-active-bg-color: #{$content-bg};
+  --el-button-active-border-color: transparent;
+  --el-button-text-color: #{$text-primary};
+  --el-button-hover-text-color: #{$text-primary};
+  --el-button-active-text-color: #{$text-primary};
+  border-radius: 14px;
+  font-weight: 720;
+  text-shadow: none;
+  box-shadow: $shadow-md;
 }
 
 .el-button {
-  --el-button-border-color: #{$border-light};
-  --el-button-hover-border-color: #{$color-primary};
-  --el-button-hover-text-color: #{$color-primary};
-  --el-button-active-border-color: #{$color-primary-dark};
+  --el-button-bg-color: #{$content-bg};
+  --el-button-border-color: transparent;
+  --el-button-text-color: #{$text-primary};
+  --el-button-hover-border-color: transparent;
+  --el-button-hover-text-color: #{$text-primary};
+  --el-button-active-border-color: transparent;
   min-height: 40px;
-  border-radius: 999px;
+  border-radius: 14px;
+  border: 0 !important;
+  background: $content-bg !important;
+  box-shadow: $shadow-sm;
   transition:
     color 0.18s ease,
     border-color 0.18s ease,
@@ -96,10 +121,14 @@ a,
 
   &:not(.is-disabled):hover {
     transform: translateY(-1px);
+    box-shadow: $shadow-md;
   }
 
   &:not(.is-disabled):active {
-    transform: translateY(0);
+    transform: translateY(1px) scale(0.99);
+    box-shadow:
+      inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+      inset 5px 5px 10px rgba(163, 177, 198, 0.42);
   }
 }
 
@@ -108,18 +137,24 @@ a,
 }
 
 .el-input__wrapper {
-  border-radius: $radius-md !important;
-  background: rgba($content-bg, 0.92) !important;
-  box-shadow: 0 0 0 1px $border-light inset !important;
+  border-radius: 14px !important;
+  background: $content-bg !important;
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.34) !important;
   transition: box-shadow 0.2s ease, background 0.2s ease;
 
   &:hover {
-    box-shadow: 0 0 0 1px rgba($text-primary, 0.22) inset !important;
+    box-shadow:
+      inset -5px -5px 10px rgba(255, 255, 255, 0.72),
+      inset 5px 5px 10px rgba(163, 177, 198, 0.38) !important;
   }
 
   &.is-focus {
     background: $content-bg !important;
-    box-shadow: 0 0 0 2px rgba($color-primary, 0.72) inset !important;
+    box-shadow:
+      inset -6px -6px 12px rgba(255, 255, 255, 0.78),
+      inset 6px 6px 12px rgba(163, 177, 198, 0.44) !important;
   }
 }
 
@@ -128,7 +163,7 @@ a,
   color: $text-primary !important;
 
   &::placeholder {
-    color: rgba($text-secondary, 0.58) !important;
+    color: rgba($text-secondary, 0.68) !important;
   }
 }
 
@@ -146,7 +181,7 @@ a,
 }
 
 .el-loading-mask {
-  background-color: rgba($surface-soft, 0.72) !important;
+  background-color: rgba($page-bg, 0.72) !important;
   backdrop-filter: blur(8px);
 }
 
@@ -155,27 +190,49 @@ a,
 }
 
 .el-pagination {
-  --el-pagination-button-bg-color: #{$content-bg};
-  --el-pagination-hover-color: #{$color-primary};
+  --el-pagination-button-bg-color: #d6dade;
+  --el-pagination-hover-color: #{$color-ink};
   gap: 6px;
 
   button,
   .el-pager li {
     min-width: 36px;
     height: 36px;
-    border-radius: 999px;
+    border-radius: 8px;
     box-shadow: $shadow-sm;
   }
 
   .el-pager li.is-active {
-    background: $text-primary;
-    color: #fff;
+    background: linear-gradient(145deg, #f5f7f8, #bfc6cc);
+    color: $color-ink;
   }
 }
 
 .el-tag {
   border-radius: 6px;
   font-weight: 500;
+}
+
+.el-popper,
+.el-picker__popper,
+.el-select__popper,
+.el-dropdown__popper {
+  border-color: rgba(255, 255, 255, 0.18) !important;
+  background: rgba($surface-soft, 0.98) !important;
+  color: $text-primary !important;
+  box-shadow: $shadow-lg !important;
+}
+
+.el-dropdown-menu,
+.el-picker-panel {
+  background: rgba($surface-soft, 0.98) !important;
+  color: $text-primary !important;
+}
+
+.el-date-table td.current:not(.disabled) .el-date-table-cell__text,
+.el-date-table td.today .el-date-table-cell__text {
+  color: $color-ink !important;
+  background: $color-primary-light !important;
 }
 
 .markdown-body,
@@ -208,9 +265,7 @@ a,
 // Mobile ElMessage adaptation
 @media (max-width: 768px) {
   html {
-    background:
-      radial-gradient(circle at 30% -12%, rgba($color-primary-light, 0.18), transparent 22rem),
-      $page-bg;
+    background: $page-bg;
   }
 
   .el-message {

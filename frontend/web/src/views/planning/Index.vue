@@ -278,6 +278,10 @@
               <div class="card-label"><el-icon><Warning /></el-icon>{{ streamMessageTitle }}</div>
               <p>{{ streamErrorMessage }}</p>
             </div>
+            <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
+            <div v-if="finalMarkdown" class="final-markdown" v-html="renderedMarkdown"></div>
+            <span v-if="streaming" class="cursor-blink">|</span>
+            <span ref="streamTail" class="stream-tail" aria-hidden="true"></span>
             <div v-if="weatherSummary" class="content-card weather-card">
               <div class="card-label"><el-icon><Cloudy /></el-icon>天气预警</div>
               <p>{{ weatherSummary }}</p>
@@ -298,7 +302,6 @@
                 :src="routeMapImage"
                 class="route-map-img"
                 alt="路线图"
-                @load="scrollOutputToBottom"
               />
               <div v-if="navigationWaypointItems.length" class="waypoint-strip">
                 <span class="waypoint-title">途径</span>
@@ -331,9 +334,6 @@
               <div class="realtime-markdown" v-html="renderedRealtimeSummary"></div>
               <div v-if="realtimeMeta" class="source-meta">{{ realtimeMeta }}</div>
             </div>
-            <div v-if="streamTokens" class="stream-tokens" v-html="renderedTokens"></div>
-            <div v-if="finalMarkdown" class="final-markdown" v-html="renderedMarkdown"></div>
-            <span v-if="streaming" class="cursor-blink">|</span>
           </div>
         </template>
         <div v-else class="output-empty">
@@ -419,6 +419,7 @@ import dayjs from 'dayjs'
 const auth = useAuthStore()
 const outputPanel = ref(null)
 const streamContent = ref(null)
+const streamTail = ref(null)
 const autoScrollOutput = ref(true)
 const outputBottomThreshold = 48
 let scrollFrameId = 0
@@ -889,14 +890,26 @@ function resetOutput() {
   stages.forEach(s => { s.active = false; s.done = false })
 }
 
-function isOutputAtBottom() {
+function getOutputScrollTarget() {
+  const el = streamContent.value
+  if (!el) return 0
+  const maxScrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
+  const tail = streamTail.value
+  if (!tail) return maxScrollTop
+  const elRect = el.getBoundingClientRect()
+  const tailRect = tail.getBoundingClientRect()
+  const tailTop = tailRect.top - elRect.top + el.scrollTop
+  return Math.min(Math.max(0, tailTop - el.clientHeight + tailRect.height), maxScrollTop)
+}
+
+function isOutputAtScrollTarget() {
   const el = streamContent.value
   if (!el) return true
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= outputBottomThreshold
+  return Math.abs(el.scrollTop - getOutputScrollTarget()) <= outputBottomThreshold
 }
 
 function handleStreamScroll() {
-  autoScrollOutput.value = isOutputAtBottom()
+  autoScrollOutput.value = isOutputAtScrollTarget()
 }
 
 function scrollOutputToBottom(force = false) {
@@ -906,8 +919,8 @@ function scrollOutputToBottom(force = false) {
       scrollFrameId = 0
       const el = streamContent.value
       if (!el) return
-      if (force || autoScrollOutput.value || isOutputAtBottom()) {
-        el.scrollTop = el.scrollHeight
+      if (force || autoScrollOutput.value || isOutputAtScrollTarget()) {
+        el.scrollTop = getOutputScrollTarget()
         autoScrollOutput.value = true
       }
     })
@@ -1058,6 +1071,7 @@ onMounted(async () => {
   flex-direction: column;
   gap: 24px;
   min-height: calc(100vh - $nav-height - 40px);
+  perspective: 1200px;
 }
 
 .planning-hero {
@@ -1065,11 +1079,17 @@ onMounted(async () => {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 16px;
-  padding: 14px 18px;
-  background: rgba($content-bg, 0.7);
-  border: 1px solid rgba($border-light, 0.88);
-  border-radius: $radius-lg;
-  box-shadow: $shadow-sm;
+  padding: 16px 18px;
+  color: #252a2e;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.98), rgba(255, 255, 255, 0.62) 46%, transparent 72%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.94), rgba(230, 229, 220, 0.7));
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 1) inset,
+    0 -14px 24px rgba(190, 183, 160, 0.12) inset,
+    0 16px 32px rgba(90, 96, 98, 0.18);
 }
 
 .hero-copy {
@@ -1084,13 +1104,13 @@ onMounted(async () => {
     font-weight: 750;
     letter-spacing: 0;
     line-height: 1.25;
-    color: $text-primary;
+    color: #202529;
     text-wrap: pretty;
   }
 
   p {
     min-width: 0;
-    color: $text-secondary;
+    color: #5b636a;
     font-size: $font-size-sm;
     line-height: 1.45;
     text-wrap: pretty;
@@ -1109,16 +1129,22 @@ onMounted(async () => {
     gap: 5px;
     min-height: 28px;
     padding: 5px 10px;
-    color: $text-secondary;
+    color: #4b5359;
     font-size: $font-size-xs;
     font-weight: 600;
-    background: rgba($surface-soft, 0.8);
-    border: 1px solid $border-light;
-    border-radius: 999px;
+    background:
+      radial-gradient(circle at 44% 25%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.65) 48%, transparent 72%),
+      linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(225, 223, 212, 0.86));
+    border: 1px solid rgba(255, 255, 255, 0.84);
+    border-radius: 9px;
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 1) inset,
+      0 -7px 14px rgba(184, 176, 151, 0.12) inset,
+      0 7px 13px rgba(91, 97, 99, 0.14);
   }
 
   .el-icon {
-    color: $color-primary;
+    color: #3f464c;
     font-size: 15px;
   }
 }
@@ -1129,20 +1155,33 @@ onMounted(async () => {
   align-items: stretch;
   min-height: 620px;
   overflow: hidden;
+  color: #252a2e;
   background:
-    linear-gradient(180deg, rgba($surface-soft, 0.66), rgba($content-bg, 0.96)),
-    $content-bg;
-  border: 1px solid rgba($border-light, 0.9);
-  border-radius: $radius-xl;
-  box-shadow: $shadow-card;
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.56) 36%, transparent 62%),
+    radial-gradient(circle at 18% 6%, rgba(255, 255, 255, 0.72), transparent 30%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.9), rgba(225, 224, 216, 0.68));
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  border-radius: 14px;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 1) inset,
+    0 -18px 36px rgba(190, 183, 160, 0.14) inset,
+    0 28px 56px rgba(89, 95, 98, 0.2),
+    0 6px 16px rgba(89, 95, 98, 0.12);
+  transform: translateZ(0);
 
   &.has-output {
     grid-template-columns: minmax(0, 1fr);
     height: max(620px, calc(100vh - $nav-height - 180px));
     min-height: 0;
     background:
-      linear-gradient(180deg, rgba($surface-soft, 0.5), rgba($content-bg, 0.96)),
-      $content-bg;
+      radial-gradient(circle at 50% 12%, rgba(255, 255, 255, 0.96), rgba(255, 255, 255, 0.52) 34%, transparent 62%),
+      linear-gradient(145deg, rgba(255, 255, 252, 0.9), rgba(226, 224, 215, 0.72));
+    color: #252522;
+    border-color: rgba(255, 255, 255, 0.78);
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 1) inset,
+      0 -18px 36px rgba(190, 183, 160, 0.14) inset,
+      0 28px 56px rgba(89, 95, 98, 0.2);
 
     .output-panel {
       border-left: 0;
@@ -1173,7 +1212,7 @@ onMounted(async () => {
   justify-content: center;
   gap: 0;
   padding: 20px 16px 12px;
-  border-bottom: 1px solid rgba($border-card, 0.76);
+  border-bottom: 1px solid rgba(48, 55, 61, 0.2);
   flex-shrink: 0;
 }
 
@@ -1189,31 +1228,44 @@ onMounted(async () => {
   min-width: 52px;
   transition: opacity 0.2s;
 
-  &:disabled { cursor: default; opacity: 0.35; }
+  &:disabled { cursor: default; opacity: 0.62; }
 }
 
 .dot-circle {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 12px;
   font-weight: 600;
-  background: $page-bg;
-  color: $text-hint;
+  background:
+    radial-gradient(circle at 44% 28%, rgba(255, 255, 255, 1), rgba(246, 246, 239, 0.98) 46%, #d5d7d2 100%);
+  color: #535c63;
+  border: 1px solid rgba(255, 255, 255, 0.62);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.92) inset,
+    0 -8px 15px rgba(184, 176, 151, 0.12) inset,
+    0 8px 15px rgba(89, 95, 98, 0.16);
   transition: all 0.3s;
 
   .done & {
-    background: $color-success;
-    color: #fff;
+    background:
+      radial-gradient(circle at 45% 28%, rgba(255, 255, 255, 0.96), rgba(218, 238, 229, 0.95) 48%, #a5c6b6 100%);
+    color: #1f4f3a;
   }
 
   .active & {
-    background: $color-primary;
-    color: #fff;
-    box-shadow: 0 2px 8px rgba($color-primary, 0.3);
+    background:
+      radial-gradient(circle at 50% 70%, #d8d9d2, #f7f6ed 58%, #ffffff 100%);
+    color: #202529;
+    box-shadow:
+      0 7px 14px rgba(176, 168, 144, 0.2) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.86) inset,
+      0 2px 5px rgba(89, 95, 98, 0.14);
+    transform: translateY(1px);
   }
 }
 
@@ -1224,7 +1276,7 @@ onMounted(async () => {
   transition: color 0.2s;
 
   .done &, .active & {
-    color: $text-primary;
+    color: #24292d;
     font-weight: 500;
   }
 }
@@ -1242,17 +1294,23 @@ onMounted(async () => {
 
 .step-mark {
   display: grid;
-  width: 50px;
-  height: 50px;
+  width: 76px;
+  height: 76px;
   place-items: center;
   margin: 2px auto 12px;
-  color: $color-primary;
-  background: $color-primary-bg;
-  border-radius: 18px;
+  color: #4d555c;
+  background:
+    radial-gradient(circle at 42% 28%, rgba(255, 255, 255, 1), rgba(248, 248, 242, 0.96) 45%, #d7d9d3 100%);
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 50%;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 1) inset,
+    0 -14px 22px rgba(184, 176, 151, 0.14) inset,
+    0 16px 26px rgba(89, 95, 98, 0.18);
 
   :deep(svg) {
-    width: 26px;
-    height: 26px;
+    width: 30px;
+    height: 30px;
   }
 }
 
@@ -1261,11 +1319,12 @@ onMounted(async () => {
   font-weight: 700;
   text-align: center;
   margin-bottom: 4px;
+  color: #202529;
 }
 
 .step-desc {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: #5e666d;
   text-align: center;
   margin-bottom: 24px;
 }
@@ -1285,7 +1344,7 @@ onMounted(async () => {
 .input-label {
   font-size: $font-size-sm;
   font-weight: 600;
-  color: $text-primary;
+  color: #252a2e;
 }
 
 .field-error {
@@ -1310,19 +1369,25 @@ onMounted(async () => {
   align-items: center;
   gap: 14px;
   padding: 16px 18px;
-  border: 1.5px solid $border-light;
-  border-radius: $radius-md;
-  background: $content-bg;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.62) 42%, transparent 70%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(228, 225, 213, 0.86));
   cursor: pointer;
   transition: all 0.2s;
   text-align: left;
   width: 100%;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.9) inset,
+    0 -12px 22px rgba(184, 176, 151, 0.12) inset,
+    0 9px 17px rgba(89, 95, 98, 0.14);
 
   .t-icon {
     width: 28px;
     height: 28px;
     flex-shrink: 0;
-    color: $text-secondary;
+    color: #566069;
     transition: color 0.2s;
   }
 
@@ -1337,12 +1402,12 @@ onMounted(async () => {
   .t-label {
     font-size: 15px;
     font-weight: 600;
-    color: $text-primary;
+    color: #24292d;
   }
 
   .t-desc {
     font-size: $font-size-xs;
-    color: $text-hint;
+    color: #667078;
   }
 
   .option-check {
@@ -1352,25 +1417,37 @@ onMounted(async () => {
     flex: 0 0 auto;
     place-items: center;
     color: transparent;
-    border: 1px solid $border-light;
+    border: 1px solid rgba(95, 105, 114, 0.28);
     border-radius: 999px;
   }
 
   &.active {
-    border-color: $color-primary;
-    background: $color-primary-bg;
+    border-color: rgba(255, 255, 255, 0.7);
+    background:
+      radial-gradient(circle at 50% 70%, #d9d9d1, #f6f5eb 58%, #ffffff 100%);
+    box-shadow:
+      0 8px 16px rgba(176, 168, 144, 0.2) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.86) inset,
+      0 3px 8px rgba(89, 95, 98, 0.14);
+    transform: translateY(1px);
 
-    .t-icon { color: $color-primary; }
-    .t-desc { color: $color-primary; }
+    .t-icon { color: #252a2e; }
+    .t-desc { color: #465059; }
     .option-check {
-      color: #fff;
-      background: $color-primary;
-      border-color: $color-primary;
+      color: #252a2e;
+      background: rgba(255, 255, 255, 0.32);
+      border-color: rgba(255, 255, 255, 0.66);
+      box-shadow: 0 3px 8px rgba(69, 78, 86, 0.18) inset;
     }
   }
 
   &:hover:not(.active) {
-    border-color: #d5d5db;
+    border-color: rgba(255, 255, 255, 0.82);
+    transform: translateY(-1px);
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.92) inset,
+      0 -12px 22px rgba(184, 176, 151, 0.1) inset,
+      0 13px 22px rgba(89, 95, 98, 0.16);
   }
 }
 
@@ -1379,27 +1456,46 @@ onMounted(async () => {
   display: flex;
   align-items: center;
   gap: 0;
-  background: $page-bg;
-  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(176, 168, 144, 0.12), rgba(255, 255, 255, 0.48));
+  border-radius: 8px;
+  box-shadow:
+    0 9px 16px rgba(176, 168, 144, 0.16) inset,
+    0 1px 0 rgba(255, 255, 255, 0.5);
   width: fit-content;
 }
 
 .people-btn {
   width: 48px;
   height: 48px;
-  border: none;
-  background: none;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background:
+    radial-gradient(circle at 45% 30%, rgba(255, 255, 255, 1), rgba(248, 248, 241, 0.96) 48%, #d7d9d3 100%);
   font-size: 22px;
-  color: $color-primary;
+  color: #4c555d;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 500;
 
-  &:hover { background: rgba($color-primary, 0.06); }
-  &:first-child { border-radius: 12px 0 0 12px; }
-  &:last-child { border-radius: 0 12px 12px 0; }
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.92) inset,
+    0 8px 15px rgba(89, 95, 98, 0.16);
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 7px 14px rgba(74, 83, 90, 0.22) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.7) inset;
+  }
+
+  &:first-child { border-radius: 8px 0 0 8px; }
+  &:last-child { border-radius: 0 8px 8px 0; }
 }
 
 .people-num {
@@ -1407,7 +1503,7 @@ onMounted(async () => {
   text-align: center;
   font-size: 20px;
   font-weight: 700;
-  color: $text-primary;
+  color: #24292d;
 }
 
 // Tags
@@ -1419,30 +1515,42 @@ onMounted(async () => {
 
 .tag-item {
   padding: 8px 16px;
-  border: 1.5px solid $border-light;
-  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 8px;
   font-size: $font-size-sm;
   cursor: pointer;
-  color: $text-secondary;
-  background: $content-bg;
+  color: #4e5860;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.98), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(229, 226, 214, 0.86));
   transition: all 0.2s;
   user-select: none;
 
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.9) inset,
+    0 7px 14px rgba(89, 95, 98, 0.14);
+
   &.active {
-    border-color: $color-primary;
-    color: $color-primary;
-    background: $color-primary-bg;
+    border-color: rgba(255, 255, 255, 0.68);
+    color: #22272b;
+    background:
+      radial-gradient(circle at 50% 70%, #d9d9d1, #f6f5eb 58%, #ffffff 100%);
     font-weight: 500;
+    box-shadow:
+      0 7px 14px rgba(74, 83, 90, 0.22) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.72) inset;
   }
 
   &.avoid-tag.active {
-    border-color: $color-danger;
-    color: $color-danger;
-    background: rgba($color-danger, 0.06);
+    border-color: rgba(255, 255, 255, 0.68);
+    color: #5e302c;
+    background:
+      radial-gradient(circle at 50% 68%, #d1aaa5, #e5d4d2 54%, #f4eeee 100%);
   }
 
   &:hover:not(.active) {
-    border-color: #d9d9de;
+    border-color: rgba(255, 255, 255, 0.82);
+    transform: translateY(-1px);
   }
 }
 
@@ -1459,8 +1567,13 @@ onMounted(async () => {
   flex-direction: column;
   gap: 4px;
   padding: 14px 16px;
-  background: $page-bg;
-  border-radius: $radius-md;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.26), rgba(93, 103, 112, 0.14));
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 8px;
+  box-shadow:
+    0 5px 10px rgba(93, 103, 112, 0.14) inset,
+    0 1px 0 rgba(255, 255, 255, 0.44);
 }
 
 .ci-label {
@@ -1472,14 +1585,14 @@ onMounted(async () => {
 .ci-val {
   font-size: $font-size-body;
   font-weight: 600;
-  color: $text-primary;
+  color: #252a2e;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .ci-sub {
   font-size: $font-size-sm;
-  color: $text-secondary;
+  color: #59626a;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -1508,19 +1621,36 @@ onMounted(async () => {
   width: 100%;
   height: 48px;
   border: none;
-  border-radius: 24px;
-  background: linear-gradient(135deg, $color-primary, $color-primary-light);
-  color: #fff;
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+    linear-gradient(145deg, rgba(255, 255, 252, 1), rgba(225, 222, 210, 0.92));
+  color: #202529;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s;
-  letter-spacing: 1px;
-  box-shadow: 0 4px 16px rgba($color-primary, 0.3);
+  letter-spacing: 0;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.75);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.96) inset,
+    0 -12px 22px rgba(184, 176, 151, 0.14) inset,
+    0 14px 24px rgba(89, 95, 98, 0.18);
 
   &:hover:not(:disabled) {
     transform: translateY(-1px);
-    box-shadow: 0 6px 24px rgba($color-primary, 0.4);
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.96) inset,
+      0 -12px 22px rgba(67, 76, 84, 0.11) inset,
+      0 18px 30px rgba(0, 0, 0, 0.38);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(1px);
+    box-shadow:
+      0 9px 17px rgba(73, 82, 89, 0.22) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.76) inset,
+      0 5px 10px rgba(0, 0, 0, 0.3);
   }
 
   &:disabled {
@@ -1534,7 +1664,7 @@ onMounted(async () => {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #fff;
+  background: #202529;
   animation: pulse-dot 1s infinite;
   margin-right: 6px;
   vertical-align: middle;
@@ -1550,7 +1680,7 @@ onMounted(async () => {
   display: flex;
   justify-content: space-between;
   padding: 16px 24px;
-  border-top: 0.5px solid $border-card;
+  border-top: 1px solid rgba(55, 63, 70, 0.18);
   flex-shrink: 0;
 }
 
@@ -1559,25 +1689,35 @@ onMounted(async () => {
 .nav-btn {
   padding: 12px 28px;
   border: none;
-  border-radius: 22px;
+  border-radius: 8px;
   font-size: $font-size-body;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s;
 
   &.back {
-    background: $page-bg;
-    color: $text-secondary;
-    &:hover { background: $border-light; }
+    color: #4d555d;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.96), transparent 58%),
+      linear-gradient(145deg, rgba(255, 255, 252, 0.96), rgba(226, 223, 211, 0.86));
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.86) inset,
+      0 8px 16px rgba(89, 95, 98, 0.14);
+    &:hover { transform: translateY(-1px); }
   }
 
   &.next {
-    background: linear-gradient(135deg, $color-primary, $color-primary-light);
-    color: #fff;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+      linear-gradient(145deg, rgba(255, 255, 252, 1), rgba(225, 222, 210, 0.92));
+    color: #202529;
     margin-left: auto;
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.96) inset,
+      0 -10px 18px rgba(184, 176, 151, 0.14) inset,
+      0 12px 22px rgba(89, 95, 98, 0.16);
     &:hover {
       transform: translateY(-1px);
-      box-shadow: 0 4px 12px rgba($color-primary, 0.3);
     }
   }
 }
@@ -1602,8 +1742,10 @@ onMounted(async () => {
 .output-panel {
   min-width: 0;
   min-height: 0;
-  background: rgba($surface-soft, 0.58);
-  border-left: 1px solid rgba($border-card, 0.82);
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.72), transparent 48%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.84), rgba(229, 226, 214, 0.68));
+  border-left: 1px solid rgba(255, 255, 255, 0.58);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -1615,8 +1757,11 @@ onMounted(async () => {
   align-items: center;
   justify-content: space-between;
   padding: 14px 20px;
-  background: rgba($content-bg, 0.72);
-  border-bottom: 1px solid rgba($border-card, 0.72);
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.96), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.94), rgba(226, 223, 211, 0.82));
+  border-bottom: 1px solid rgba(196, 189, 166, 0.28);
+  color: #22272b;
   flex-shrink: 0;
   backdrop-filter: blur(12px);
 }
@@ -1637,26 +1782,52 @@ onMounted(async () => {
 }
 
 .status-text { font-size: $font-size-sm; font-weight: 500; }
-.stage-badge { font-size: $font-size-xs; background: $page-bg; padding: 3px 10px; border-radius: 12px; color: $text-secondary; }
-.duration { font-size: $font-size-xs; color: $text-hint; }
+.stage-badge {
+  font-size: $font-size-xs;
+  background: rgba(255, 255, 255, 0.52);
+  padding: 3px 10px;
+  border-radius: 6px;
+  color: #4d555d;
+  box-shadow: 0 4px 9px rgba(74, 83, 90, 0.12) inset;
+}
+.duration { font-size: $font-size-xs; color: #5d666e; }
 
 .action-btn {
-  padding: 6px 18px; border: none; border-radius: 16px; font-size: $font-size-sm; font-weight: 500; cursor: pointer; transition: all 0.2s;
-  &.stop { background: rgba($color-danger, 0.1); color: $color-danger; &:hover { background: rgba($color-danger, 0.2); } }
-  &.copy { background: $page-bg; color: $text-primary; &:hover { background: $border-light; } }
+  padding: 6px 18px;
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 7px;
+  font-size: $font-size-sm;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 223, 211, 0.86));
+  color: #252a2e;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.88) inset,
+    0 7px 14px rgba(89, 95, 98, 0.14);
+
+  &:hover {
+    transform: translateY(-1px);
+  }
+
+  &.stop {
+    color: #653632;
+  }
 }
 
 .stage-steps {
-  display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px; border-bottom: 1px solid rgba($border-card, 0.72);
+  display: flex; flex-wrap: wrap; gap: 4px; padding: 10px 20px; border-bottom: 1px solid rgba(196, 189, 166, 0.22);
   flex-shrink: 0;
-  background: rgba($content-bg, 0.52);
+  background: rgba(255, 255, 255, 0.34);
 }
 
 .step-item {
-  display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 12px;
+  display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 6px;
   font-size: $font-size-xs; color: $text-hint; white-space: nowrap; transition: all 0.2s;
-  .step-dot { width: 6px; height: 6px; border-radius: 50%; background: $border-light; transition: all 0.2s; }
-  &.active { color: $color-primary; font-weight: 600; background: $color-primary-bg; .step-dot { background: $color-primary; } }
+  .step-dot { width: 6px; height: 6px; border-radius: 50%; background: rgba(104, 106, 101, 0.28); transition: all 0.2s; }
+  &.active { color: #252522; font-weight: 600; background: rgba(255, 255, 255, 0.54); .step-dot { background: #252522; } }
   &.done { color: $color-success; .step-dot { background: $color-success; } }
 }
 
@@ -1678,9 +1849,15 @@ onMounted(async () => {
   min-width: 0;
   margin-bottom: 14px;
   padding: 16px 18px;
-  background: rgba($content-bg, 0.84);
-  border: 1px solid rgba($border-card, 0.82);
-  border-radius: $radius-md;
+  background:
+    radial-gradient(circle at 50% 16%, rgba(255, 255, 255, 0.78), transparent 55%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.82), rgba(229, 226, 214, 0.62));
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 8px;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.94) inset,
+    0 -10px 18px rgba(184, 176, 151, 0.1) inset,
+    0 12px 22px rgba(89, 95, 98, 0.14);
   overflow-wrap: anywhere;
   word-break: break-word;
 
@@ -1749,7 +1926,7 @@ onMounted(async () => {
   width: 100%;
   border-radius: $radius-sm;
   margin-bottom: 10px;
-  border: 1px solid $border-light;
+  border: 1px solid rgba(255, 255, 255, 0.12);
 }
 
 .waypoint-strip {
@@ -1776,9 +1953,9 @@ onMounted(async () => {
   color: $text-secondary;
   font-size: $font-size-xs;
   line-height: 1.35;
-  background: $page-bg;
-  border: 1px solid $border-light;
-  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.48);
+  border: 1px solid rgba(255, 255, 255, 0.56);
+  border-radius: 6px;
 }
 
 .waypoint-name {
@@ -1806,16 +1983,16 @@ onMounted(async () => {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: none;
-  background: $color-primary-bg;
-  color: $color-primary;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.5);
+  color: #252522;
   padding: 6px 14px;
-  border-radius: 16px;
+  border-radius: 7px;
   font-size: $font-size-sm;
   cursor: pointer;
   font-weight: 500;
   transition: all 0.2s;
-  &:hover { background: rgba($color-primary, 0.15); }
+  &:hover { background: rgba(255, 255, 255, 0.72); }
 }
 
 .final-markdown, .stream-tokens, .realtime-markdown {
@@ -1846,13 +2023,14 @@ onMounted(async () => {
 }
 
 .cursor-blink { animation: blink 1s infinite; color: $color-primary; font-weight: 300; }
+.stream-tail { display: block; width: 1px; height: 1px; pointer-events: none; }
 @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
 
 // Empty state
 .output-empty {
   flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 32px; text-align: center;
   background:
-    linear-gradient(180deg, rgba($content-bg, 0.58), rgba($surface-soft, 0.38));
+    linear-gradient(180deg, rgba(255, 255, 255, 0.44), rgba(229, 226, 214, 0.2));
 }
 .empty-visual {
   display: grid;
@@ -1860,10 +2038,13 @@ onMounted(async () => {
   height: 68px;
   place-items: center;
   margin-bottom: 16px;
-  color: #fff;
-  background: $color-ink;
-  border-radius: 24px;
-  box-shadow: $shadow-md;
+  color: #3e464d;
+  background:
+    radial-gradient(circle at 45% 28%, rgba(255, 255, 255, 1), rgba(248, 248, 241, 0.96) 48%, #d7d9d3 100%);
+  border-radius: 50%;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.94) inset,
+    0 16px 26px rgba(89, 95, 98, 0.18);
 
   :deep(svg) {
     width: 34px;
@@ -1879,12 +2060,12 @@ onMounted(async () => {
   gap: 6px;
   font-size: $font-size-sm;
   padding: 6px 14px;
-  background: $page-bg;
-  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 7px;
   color: $text-secondary;
 
   .el-icon {
-    color: $color-primary;
+    color: #4d555c;
   }
 }
 
@@ -1922,8 +2103,11 @@ onMounted(async () => {
 }
 
 .recent-card {
-  background: $content-bg;
-  border-radius: $radius-md;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.8), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.86), rgba(229, 226, 214, 0.66));
+  border: 1px solid rgba(255, 255, 255, 0.64);
+  border-radius: 8px;
   padding: 14px 16px;
   box-shadow: $shadow-sm;
   cursor: pointer;
@@ -1966,7 +2150,7 @@ onMounted(async () => {
 .rc-transport {
   font-size: $font-size-xs;
   padding: 2px 8px;
-  background: $page-bg;
+  background: rgba(255, 255, 255, 0.5);
   border-radius: 6px;
   color: $text-secondary;
 }
@@ -1984,6 +2168,191 @@ onMounted(async () => {
   font-size: $font-size-xs;
   color: $text-hint;
   margin-left: auto;
+}
+
+// Neumorphic soft UI override
+.planning-hero,
+.planning-workspace,
+.content-card,
+.recent-card,
+.confirm-item,
+.stream-status-bar,
+.stage-steps,
+.output-empty,
+.output-panel {
+  border: 0;
+  background: $content-bg;
+  box-shadow: $shadow-card;
+}
+
+.planning-hero {
+  color: $text-primary;
+}
+
+.hero-copy {
+  h1 {
+    color: $text-primary;
+  }
+
+  p {
+    color: $text-secondary;
+  }
+}
+
+.hero-rail span,
+.transport-option,
+.tag-item,
+.people-btn,
+.nav-btn,
+.generate-btn,
+.action-btn,
+.download-btn,
+.waypoint-chip,
+.feat-item,
+.rc-transport {
+  border: 0;
+  background: $content-bg;
+  box-shadow: $shadow-sm;
+}
+
+.hero-rail span,
+.transport-option,
+.tag-item,
+.nav-btn,
+.generate-btn,
+.action-btn,
+.download-btn {
+  border-radius: 16px;
+}
+
+.planning-workspace {
+  border-radius: 28px;
+
+  &.has-output {
+    background: $content-bg;
+    box-shadow: $shadow-card;
+  }
+}
+
+.step-indicator,
+.step-nav,
+.stage-steps,
+.stream-status-bar {
+  border-color: rgba(163, 177, 198, 0.18);
+}
+
+.dot-circle,
+.step-mark,
+.empty-visual {
+  border: 0;
+  background: $content-bg;
+  box-shadow: $shadow-md;
+}
+
+.step-dot-nav.done .dot-circle,
+.step-dot-nav.active .dot-circle,
+.transport-option.active,
+.tag-item.active,
+.tag-item.avoid-tag.active {
+  background: $content-bg;
+  box-shadow:
+    inset -6px -6px 12px rgba(255, 255, 255, 0.7),
+    inset 6px 6px 12px rgba(163, 177, 198, 0.42);
+}
+
+.transport-option,
+.tag-item,
+.people-btn,
+.nav-btn,
+.generate-btn,
+.action-btn,
+.recent-card {
+  transition:
+    box-shadow 0.18s ease,
+    transform 0.18s ease,
+    color 0.18s ease;
+}
+
+.transport-option:hover:not(.active),
+.tag-item:hover:not(.active),
+.people-btn:hover,
+.nav-btn:hover,
+.generate-btn:hover:not(:disabled),
+.action-btn:hover,
+.recent-card:hover {
+  transform: translateY(-1px);
+  box-shadow: $shadow-md;
+}
+
+.transport-option:active,
+.tag-item:active,
+.people-btn:active,
+.nav-btn:active,
+.generate-btn:active:not(:disabled),
+.action-btn:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42);
+}
+
+.step-mark {
+  color: $color-primary-dark;
+}
+
+.step-title,
+.input-label,
+.ci-val,
+.t-label,
+.people-num {
+  color: $text-primary;
+}
+
+.step-desc,
+.t-desc,
+.ci-sub {
+  color: $text-secondary;
+}
+
+.output-panel {
+  border-left: 0;
+  box-shadow:
+    inset -8px -8px 16px rgba(255, 255, 255, 0.52),
+    inset 8px 8px 16px rgba(163, 177, 198, 0.22);
+}
+
+.content-card {
+  border-radius: 20px;
+  box-shadow:
+    -7px -7px 14px rgba(255, 255, 255, 0.62),
+    7px 7px 14px rgba(163, 177, 198, 0.3);
+}
+
+.step-nav .nav-btn.next,
+.step-nav .nav-btn.back,
+.generate-btn {
+  border: 0;
+  border-radius: 16px;
+  background: $content-bg;
+  color: $text-primary;
+  text-shadow: none;
+  box-shadow: $shadow-sm;
+}
+
+.step-nav .nav-btn.next:hover,
+.step-nav .nav-btn.back:hover,
+.generate-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: $shadow-md;
+}
+
+.step-nav .nav-btn.next:active,
+.step-nav .nav-btn.back:active,
+.generate-btn:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42);
 }
 
 // Mobile
@@ -2020,7 +2389,7 @@ onMounted(async () => {
     flex-direction: column;
     min-height: auto;
     gap: 0;
-    border-radius: $radius-lg;
+    border-radius: 10px;
 
     &.has-output {
       height: calc(100dvh - $tab-height - 112px);
@@ -2036,7 +2405,7 @@ onMounted(async () => {
   .output-panel {
     min-height: 0;
     flex: 1;
-    border-top: 1px solid rgba($border-card, 0.86);
+    border-top: 1px solid rgba(255, 255, 255, 0.58);
     border-left: 0;
   }
 

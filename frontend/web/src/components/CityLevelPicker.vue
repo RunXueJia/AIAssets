@@ -163,6 +163,7 @@
         :with-header="false"
         :lock-scroll="false"
         append-to-body
+        modal-class="city-level-drawer-mask"
         class="city-level-drawer"
       >
         <div class="drawer-shell">
@@ -538,15 +539,19 @@ onBeforeUnmount(() => {
 
 .city-level-picker.error .picker-trigger {
   border-color: rgba($color-danger, 0.62);
-  box-shadow: 0 0 0 3px rgba($color-danger, 0.1);
+  box-shadow:
+    0 0 0 2px rgba($color-danger, 0.3) inset,
+    0 8px 16px rgba(176, 168, 144, 0.18) inset;
 }
 
 :global(.city-level-popper) {
   padding: 0 !important;
-  border: 1px solid rgba($border-card, 0.9);
-  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
   overflow: hidden;
-  background: rgba($content-bg, 0.98);
+  background:
+    radial-gradient(circle at 50% 12%, rgba(255, 255, 255, 0.92), transparent 54%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.96), rgba(228, 225, 214, 0.92));
   box-shadow: $shadow-lg;
 }
 
@@ -568,10 +573,12 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 12px;
   padding: 10px 52px 10px 14px;
-  border: 1px solid $border-light;
-  border-radius: $radius-md;
-  background: $content-bg;
-  color: $text-primary;
+  border: 1px solid rgba(255, 255, 255, 0.58);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 18% 20%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.62) 42%, transparent 70%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(228, 225, 213, 0.86));
+  color: #252522;
   text-align: left;
   cursor: pointer;
   transition:
@@ -581,14 +588,20 @@ onBeforeUnmount(() => {
     background 0.18s ease;
 
   &:hover:not(:disabled) {
-    border-color: rgba($color-primary, 0.35);
-    box-shadow: 0 8px 20px rgba($text-primary, 0.04);
+    border-color: rgba(255, 255, 255, 0.84);
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.92) inset,
+      0 -10px 18px rgba(184, 176, 151, 0.1) inset,
+      0 13px 22px rgba(89, 95, 98, 0.16);
+    transform: translateY(-1px);
   }
 
   &:focus-visible {
     outline: none;
-    border-color: rgba($color-primary, 0.5);
-    box-shadow: 0 0 0 3px rgba($color-primary, 0.12);
+    border-color: rgba(255, 255, 255, 0.88);
+    box-shadow:
+      0 0 0 2px rgba(255, 255, 255, 0.54) inset,
+      0 10px 18px rgba(89, 95, 98, 0.16);
   }
 
   &:disabled {
@@ -599,7 +612,7 @@ onBeforeUnmount(() => {
 
 .trigger-shell.open .picker-trigger,
 .trigger-shell.filled .picker-trigger {
-  border-color: rgba($color-primary, 0.38);
+  border-color: rgba(255, 255, 255, 0.7);
 }
 
 .trigger-leading {
@@ -609,9 +622,11 @@ onBeforeUnmount(() => {
   width: 28px;
   height: 28px;
   flex: 0 0 auto;
-  border-radius: 10px;
-  background: $color-primary-bg;
-  color: $color-primary;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 50% 28%, rgba(255, 255, 255, 1), rgba(248, 248, 241, 0.96) 52%, #d7d9d3 100%);
+  color: #4d555d;
+  box-shadow: 0 5px 9px rgba(63, 72, 80, 0.16) inset;
 }
 
 .trigger-icon {
@@ -629,7 +644,7 @@ onBeforeUnmount(() => {
 .trigger-label {
   font-size: $font-size-xs;
   line-height: 1.2;
-  color: $text-hint;
+  color: #667078;
   font-weight: 600;
 }
 
@@ -643,7 +658,7 @@ onBeforeUnmount(() => {
   font-weight: 600;
 
   &.placeholder {
-    color: $text-hint;
+    color: #667078;
     font-weight: 500;
   }
 }
@@ -653,7 +668,7 @@ onBeforeUnmount(() => {
   right: 14px;
   top: 50%;
   transform: translateY(-50%);
-  color: $text-hint;
+  color: #59636b;
   font-size: 16px;
   pointer-events: none;
 }
@@ -671,17 +686,18 @@ onBeforeUnmount(() => {
   padding: 0;
   border: none;
   background: transparent;
-  color: $text-hint;
+  color: #59636b;
   cursor: pointer;
 
   &:hover {
-    color: $color-primary;
+    color: #252a2e;
   }
 }
 
 .picker-panel {
   min-width: 0;
-  padding: 4px;
+  padding: 16px;
+  background: $content-bg;
 }
 
 .panel-head {
@@ -730,19 +746,20 @@ onBeforeUnmount(() => {
 
 .panel-column {
   min-width: 0;
-  border: 1px solid rgba($border-card, 0.9);
-  border-radius: $radius-md;
-  background: rgba($surface-soft, 0.66);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 252, 0.8), rgba(229, 226, 214, 0.62));
   overflow: hidden;
 }
 
 .column-head {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba($border-card, 0.86);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   font-size: $font-size-xs;
   font-weight: 700;
   color: $text-secondary;
-  background: rgba($content-bg, 0.72);
+  background: rgba(255, 255, 255, 0.44);
 }
 
 .column-scroll {
@@ -756,7 +773,7 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 10px 12px;
   border: none;
-  border-bottom: 1px solid rgba($border-card, 0.58);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   background: transparent;
   color: $text-secondary;
   cursor: pointer;
@@ -764,14 +781,19 @@ onBeforeUnmount(() => {
   transition: background 0.16s ease, color 0.16s ease;
 
   &:hover {
-    background: rgba($content-bg, 0.68);
+    background: rgba(255, 255, 255, 0.48);
     color: $text-primary;
   }
 
   &.active {
-    background: $color-primary-bg;
-    color: $color-primary;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 58%),
+      linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 223, 211, 0.88));
+    color: #252a2e;
     font-weight: 650;
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.88) inset,
+      0 7px 13px rgba(89, 95, 98, 0.14);
   }
 }
 
@@ -803,18 +825,24 @@ onBeforeUnmount(() => {
 .mobile-tab {
   flex: 1;
   min-height: 40px;
-  border: 1px solid $border-light;
-  border-radius: 14px;
-  background: $content-bg;
-  color: $text-secondary;
+  border: 1px solid rgba(255, 255, 255, 0.54);
+  border-radius: 8px;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.96), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.96), rgba(226, 223, 211, 0.86));
+  color: #4c555d;
   font-size: $font-size-sm;
   font-weight: 650;
   cursor: pointer;
 
   &.active {
-    border-color: rgba($color-primary, 0.42);
-    background: $color-primary-bg;
-    color: $color-primary;
+    border-color: rgba(255, 255, 255, 0.7);
+    background:
+      radial-gradient(circle at 50% 70%, #d9d9d1, #f6f5eb 58%, #ffffff 100%);
+    color: #22272b;
+    box-shadow:
+      0 7px 14px rgba(74, 83, 90, 0.22) inset,
+      0 -1px 0 rgba(255, 255, 255, 0.72) inset;
   }
 
   &.disabled {
@@ -841,11 +869,9 @@ onBeforeUnmount(() => {
   height: 100%;
   display: flex;
   flex-direction: column;
-  padding: 8px 14px calc(14px + env(safe-area-inset-bottom, 0));
-  background:
-    linear-gradient(180deg, rgba($surface-soft, 0.86), rgba($content-bg, 0.98)),
-    $content-bg;
-  border-radius: 20px 20px 0 0;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom, 0));
+  background: $content-bg;
+  border-radius: 28px 28px 0 0;
 }
 
 .drawer-handle {
@@ -874,5 +900,119 @@ onBeforeUnmount(() => {
   .mobile-list-wrap {
     height: calc(100% - 100px);
   }
+}
+
+// Neumorphic soft UI override
+:global(.city-level-popper) {
+  border: 0;
+  background: $content-bg !important;
+  border-radius: 24px;
+  box-shadow: $shadow-lg;
+}
+
+:global(.city-level-drawer-mask.el-overlay) {
+  background-color: rgba(47, 55, 66, 0.28) !important;
+  overflow: hidden !important;
+}
+
+:global(.city-level-drawer-mask.el-overlay .el-drawer),
+:global(.city-level-drawer.el-drawer) {
+  display: flex !important;
+  flex-direction: column;
+  position: absolute !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  left: 0 !important;
+  width: 100% !important;
+  min-height: 320px;
+  background: $content-bg !important;
+  border-radius: 28px 28px 0 0 !important;
+  overflow: hidden !important;
+  box-shadow:
+    -10px -10px 20px rgba(255, 255, 255, 0.7),
+    10px 10px 24px rgba(163, 177, 198, 0.42) !important;
+}
+
+:global(.city-level-drawer-mask.el-overlay .el-drawer__body),
+:global(.city-level-drawer.el-drawer .el-drawer__body) {
+  flex: 1;
+  min-height: 0;
+  padding: 0 !important;
+  background: $content-bg !important;
+  border-radius: 28px 28px 0 0;
+  overflow: hidden;
+}
+
+.picker-trigger,
+.mobile-tab {
+  border: 0;
+  background: $content-bg;
+  color: $text-primary;
+  box-shadow: $shadow-sm;
+}
+
+.picker-trigger:hover:not(:disabled),
+.mobile-tab:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: $shadow-md;
+}
+
+.trigger-shell.open .picker-trigger,
+.trigger-shell.filled .picker-trigger,
+.picker-trigger:active,
+.mobile-tab.active {
+  background: $content-bg;
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42);
+}
+
+.trigger-leading {
+  background: $content-bg;
+  color: $color-primary-dark;
+  box-shadow:
+    inset -3px -3px 6px rgba(255, 255, 255, 0.7),
+    inset 3px 3px 6px rgba(163, 177, 198, 0.36);
+}
+
+.panel-column,
+.drawer-shell {
+  border: 0;
+  background: $content-bg;
+  box-shadow:
+    inset -6px -6px 12px rgba(255, 255, 255, 0.54),
+    inset 6px 6px 12px rgba(163, 177, 198, 0.22);
+}
+
+.panel-grid,
+.mobile-list-wrap {
+  padding: 8px;
+  border-radius: 22px;
+  background: $content-bg;
+  box-shadow:
+    inset -7px -7px 14px rgba(255, 255, 255, 0.58),
+    inset 7px 7px 14px rgba(163, 177, 198, 0.22);
+}
+
+.panel-grid {
+  gap: 12px;
+}
+
+.mobile-tabs {
+  padding: 2px 4px 14px;
+}
+
+.column-head {
+  background: transparent;
+  border-bottom-color: rgba(163, 177, 198, 0.18);
+}
+
+.picker-item:hover,
+.picker-item.active {
+  background: $content-bg;
+  color: $text-primary;
+  box-shadow:
+    inset -4px -4px 8px rgba(255, 255, 255, 0.58),
+    inset 4px 4px 8px rgba(163, 177, 198, 0.28);
 }
 </style>

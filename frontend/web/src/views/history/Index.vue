@@ -23,97 +23,114 @@
       </div>
     </div>
 
-    <!-- Loading -->
-    <div v-if="loading" class="loading-state">
-      <div class="loading-spinner"></div>
-      <p>加载中...</p>
-    </div>
-
-    <!-- Empty -->
-    <div v-else-if="!records.length" class="empty-state">
-      <div class="empty-icon">
-        <el-icon><Tickets /></el-icon>
-      </div>
-      <p class="empty-title">
-        {{ activeFilter === 'all' ? '还没有生成记录' : statusLabel(activeFilter) + '的记录暂无' }}
-      </p>
-      <p class="empty-desc" v-if="activeFilter === 'all'">去首页创建你的第一条出行规划吧</p>
-      <el-button v-if="activeFilter === 'all'" type="primary" round @click="$router.push('/')">去规划</el-button>
-    </div>
-
-    <!-- Record List -->
-    <div v-else class="record-list">
-      <div
-        v-for="item in records"
-        :key="item.id"
-        class="record-card"
-        :class="'card-' + item.status"
-        @click="$router.push(`/history/${item.id}`)"
-      >
-        <!-- Left accent bar -->
-        <div class="card-accent" :class="item.status"></div>
-
-        <div class="card-body">
-          <!-- Top row: transport icon + route + status -->
-          <div class="card-main">
-            <div class="transport-icon" :class="item.transport_mode">
-              <component :is="transportIcon(item.transport_mode)" />
-            </div>
-            <div class="route-info">
-              <div class="route-line">
-                <span class="place-from">{{ item.origin_text }}</span>
-                <span class="route-arrow">→</span>
-                <span class="place-to">{{ item.destination_text }}</span>
-              </div>
-              <div class="route-meta">
-                <span class="meta-tag">{{ transportLabel(item.transport_mode) }}</span>
-                <span v-if="item.summary_title" class="meta-summary">{{ item.summary_title }}</span>
-              </div>
-            </div>
-            <span class="status-dot-mini" :class="item.status"></span>
-          </div>
-
-          <!-- Bottom row: time + actions -->
-          <div class="card-foot">
-            <span class="record-time">{{ formatRelative(item.created_at) }}</span>
-            <span class="record-date">{{ formatDate(item.created_at) }}</span>
-            <span v-if="item.duration_ms" class="record-duration">耗时 {{ (item.duration_ms / 1000).toFixed(0) }}s</span>
+    <div ref="scrollAreaRef" class="history-scroll-area" @scroll="handleScroll">
+      <!-- Loading -->
+      <div v-if="loading && !records.length" class="loading-state">
+        <div class="loading-orb" aria-hidden="true">
+          <span></span>
+        </div>
+        <p>加载中...</p>
+        <div class="loading-skeleton-list" aria-hidden="true">
+          <div v-for="i in 3" :key="i" class="loading-skeleton-card">
+            <span class="skeleton-icon"></span>
+            <span class="skeleton-lines">
+              <span></span>
+              <span></span>
+            </span>
           </div>
         </div>
+      </div>
 
-        <div class="card-arrow">
-          <el-icon><ArrowRight /></el-icon>
+      <!-- Empty -->
+      <div v-else-if="!records.length" class="empty-state">
+        <div class="empty-icon">
+          <el-icon><Tickets /></el-icon>
+        </div>
+        <p class="empty-title">
+          {{ activeFilter === 'all' ? '还没有生成记录' : statusLabel(activeFilter) + '的记录暂无' }}
+        </p>
+        <p class="empty-desc" v-if="activeFilter === 'all'">去首页创建你的第一条出行规划吧</p>
+        <el-button v-if="activeFilter === 'all'" type="primary" round @click="$router.push('/')">去规划</el-button>
+      </div>
+
+      <!-- Record List -->
+      <div v-else class="record-list">
+        <div
+          v-for="item in records"
+          :key="item.id"
+          class="record-card"
+          :class="'card-' + item.status"
+          @click="$router.push(`/history/${item.id}`)"
+        >
+          <!-- Left accent bar -->
+          <div class="card-accent" :class="item.status"></div>
+
+          <div class="card-body">
+            <!-- Top row: transport icon + route + status -->
+            <div class="card-main">
+              <div class="transport-icon" :class="item.transport_mode">
+                <component :is="transportIcon(item.transport_mode)" />
+              </div>
+              <div class="route-info">
+                <div class="route-line">
+                  <span class="place-from">{{ item.origin_text }}</span>
+                  <span class="route-arrow">→</span>
+                  <span class="place-to">{{ item.destination_text }}</span>
+                </div>
+                <div class="route-meta">
+                  <span class="meta-tag">{{ transportLabel(item.transport_mode) }}</span>
+                  <span v-if="item.summary_title" class="meta-summary">{{ item.summary_title }}</span>
+                </div>
+              </div>
+              <span class="status-dot-mini" :class="item.status"></span>
+            </div>
+
+            <!-- Bottom row: time + actions -->
+            <div class="card-foot">
+              <span class="record-time">{{ formatRelative(item.created_at) }}</span>
+              <span class="record-date">{{ formatDate(item.created_at) }}</span>
+              <span v-if="item.duration_ms" class="record-duration">耗时 {{ (item.duration_ms / 1000).toFixed(0) }}s</span>
+            </div>
+          </div>
+
+          <div class="card-arrow">
+            <el-icon><ArrowRight /></el-icon>
+          </div>
         </div>
       </div>
-    </div>
 
-    <!-- Pagination -->
-    <div class="pagination-wrap" v-if="total > pageSize">
-      <el-pagination
-        :current-page="page"
-        :total="total"
-        :page-size="pageSize"
-        layout="prev, pager, next"
-        @current-change="fetchRecords"
-      />
+      <div v-if="records.length" class="load-more-state">
+        <template v-if="loadingMore">
+          <span class="load-more-dot"></span>
+          <span>正在加载...</span>
+        </template>
+        <template v-else-if="hasMore">
+          <span>继续下滑加载更多</span>
+        </template>
+        <template v-else>
+          <span>已加载全部</span>
+        </template>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ArrowRight, Tickets } from '@element-plus/icons-vue'
 import { Van, Guide, User, Bicycle, Compass, Connection } from '@element-plus/icons-vue'
 import { planningApi } from '@/api/planning'
-import { useLoading } from '@/composables/useLoading'
 import dayjs from 'dayjs'
 
-const { loading, withLoading } = useLoading()
+const loading = ref(false)
+const loadingMore = ref(false)
 const records = ref([])
 const total = ref(0)
 const page = ref(1)
 const pageSize = 20
 const activeFilter = ref('all')
+const scrollAreaRef = ref(null)
+let scrollCheckTimer = null
 
 const filters = [
   { label: '全部', value: 'all' },
@@ -125,6 +142,7 @@ const filters = [
 const statusMap = { pending: '等待中', streaming: '生成中', completed: '已完成', failed: '失败', canceled: '已取消' }
 const transportMap = { driving: '自驾', transit: '公共交通', walking: '步行', cycling: '骑行', motorcycle: '摩托车', mixed: '混合出行' }
 const transportIcons = { driving: Van, transit: Guide, walking: User, cycling: Bicycle, motorcycle: Compass, mixed: Connection }
+const hasMore = computed(() => records.value.length < total.value)
 
 function statusLabel(s) { return statusMap[s] || s }
 function transportLabel(t) { return transportMap[t] || t }
@@ -154,20 +172,81 @@ function formatRelative(t) {
 }
 
 function switchFilter(value) {
+  if (activeFilter.value === value) return
   activeFilter.value = value
-  page.value = 1
-  fetchRecords()
+  fetchRecords({ reset: true })
 }
 
-const fetchRecords = withLoading(async () => {
-  const params = { page: page.value, page_size: pageSize }
-  if (activeFilter.value !== 'all') params.status = activeFilter.value
-  const res = await planningApi.getRecords(params)
-  records.value = res.data?.items || []
-  total.value = res.data?.total || 0
+async function fetchRecords({ reset = false } = {}) {
+  if (loading.value || loadingMore.value) return
+  if (!reset && records.value.length && !hasMore.value) return
+
+  if (reset) {
+    records.value = []
+    total.value = 0
+    page.value = 0
+    await nextTick()
+    if (scrollAreaRef.value) scrollAreaRef.value.scrollTop = 0
+  }
+
+  const nextPage = reset ? 1 : page.value + 1
+  loading.value = reset || !records.value.length
+  loadingMore.value = !loading.value
+  let loaded = false
+
+  try {
+    const params = { page: nextPage, page_size: pageSize }
+    if (activeFilter.value !== 'all') params.status = activeFilter.value
+    const res = await planningApi.getRecords(params)
+    const nextItems = res.data?.items || []
+    total.value = res.data?.total || 0
+    page.value = nextPage
+    records.value = reset ? nextItems : records.value.concat(nextItems)
+    if (!nextItems.length && records.value.length < total.value) {
+      total.value = records.value.length
+    }
+    loaded = true
+  } finally {
+    loading.value = false
+    loadingMore.value = false
+  }
+
+  if (loaded) {
+    await nextTick()
+    checkAndLoadMore()
+  }
+}
+
+function handleScroll() {
+  if (scrollCheckTimer) window.clearTimeout(scrollCheckTimer)
+  scrollCheckTimer = window.setTimeout(checkAndLoadMore, 80)
+}
+
+function checkAndLoadMore() {
+  const el = scrollAreaRef.value
+  if (!el || loading.value || loadingMore.value || !hasMore.value) return
+  const isInnerScroll = el.scrollHeight > el.clientHeight + 1
+  const distanceToBottom = isInnerScroll
+    ? el.scrollHeight - el.scrollTop - el.clientHeight
+    : document.documentElement.scrollHeight - window.scrollY - window.innerHeight
+
+  if (distanceToBottom <= 96) {
+    fetchRecords()
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('scroll', handleScroll, { passive: true })
+  fetchRecords({ reset: true })
 })
 
-onMounted(() => fetchRecords())
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', handleScroll)
+  if (scrollCheckTimer) {
+    window.clearTimeout(scrollCheckTimer)
+    scrollCheckTimer = null
+  }
+})
 </script>
 
 <style lang="scss" scoped>
@@ -200,6 +279,10 @@ onMounted(() => fetchRecords())
   margin-top: 2px;
 }
 
+.history-scroll-area {
+  min-height: 0;
+}
+
 // Filter tabs
 .filter-tabs {
   display: flex;
@@ -215,38 +298,126 @@ onMounted(() => fetchRecords())
   font-size: $font-size-sm;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition:
+    color 0.18s ease,
+    background 0.18s ease,
+    box-shadow 0.18s ease,
+    transform 0.18s ease;
   box-shadow: $shadow-sm;
 
   &.active {
-    background: $text-primary;
-    color: #fff;
+    background: $content-bg;
+    color: $text-primary;
     font-weight: 600;
+    box-shadow:
+      inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+      inset 5px 5px 10px rgba(163, 177, 198, 0.42);
   }
 
   &:hover:not(.active) {
-    background: #f5f5f5;
+    background: $content-bg;
     color: $text-primary;
+    transform: translateY(-1px);
+    box-shadow: $shadow-md;
   }
 }
 
 // Loading
 .loading-state {
   text-align: center;
-  padding: 80px 0;
+  padding: 56px 0 24px;
   color: $text-secondary;
 }
 
-.loading-spinner {
-  width: 36px; height: 36px;
-  border: 3px solid $border-light;
-  border-top-color: $color-primary;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+.loading-orb {
+  width: 54px;
+  height: 54px;
+  display: grid;
+  place-items: center;
   margin: 0 auto 16px;
+  border-radius: 50%;
+  background: $content-bg;
+  box-shadow: $shadow-md;
+
+  span {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: $content-bg;
+    box-shadow:
+      inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+      inset 5px 5px 10px rgba(163, 177, 198, 0.42);
+    animation: soft-pulse 1.05s ease-in-out infinite;
+  }
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+.loading-state p {
+  font-size: $font-size-sm;
+  font-weight: 600;
+}
+
+.loading-skeleton-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.loading-skeleton-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 80px;
+  padding: 16px;
+  border-radius: 16px;
+  background: $content-bg;
+  box-shadow: $shadow-sm;
+}
+
+.skeleton-icon,
+.skeleton-lines span {
+  display: block;
+  border-radius: 999px;
+  background: $content-bg;
+  box-shadow:
+    inset -4px -4px 8px rgba(255, 255, 255, 0.62),
+    inset 4px 4px 8px rgba(163, 177, 198, 0.28);
+}
+
+.skeleton-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 auto;
+}
+
+.skeleton-lines {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  span:first-child {
+    width: 72%;
+    height: 14px;
+  }
+
+  span:last-child {
+    width: 46%;
+    height: 10px;
+  }
+}
+
+@keyframes soft-pulse {
+  0%, 100% {
+    transform: scale(0.82);
+    opacity: 0.74;
+  }
+
+  50% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
 
 // Empty
 .empty-state {
@@ -461,32 +632,110 @@ onMounted(() => fetchRecords())
   flex-shrink: 0;
 }
 
-// Pagination
-.pagination-wrap {
+.load-more-state {
   display: flex;
+  align-items: center;
   justify-content: center;
-  margin-top: 28px;
+  gap: 8px;
+  min-height: 44px;
+  margin-top: 16px;
+  color: $text-hint;
+  font-size: $font-size-xs;
+  font-weight: 600;
+}
+
+.load-more-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: $color-primary-dark;
+  box-shadow:
+    -3px -3px 6px rgba(255, 255, 255, 0.68),
+    3px 3px 6px rgba(163, 177, 198, 0.38);
+  animation: soft-pulse 1.05s ease-in-out infinite;
 }
 
 // Mobile
 @media (max-width: 768px) {
   .history-page {
-    padding: 0 4px;
+    height: calc(100dvh - 24px - #{$tab-height} - env(safe-area-inset-bottom, 0px) - 18px);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
   }
 
-  .page-title { font-size: 22px; }
+  .page-header {
+    flex: 0 0 auto;
+    margin-bottom: 8px;
+    padding: 0 4px 2px;
+    overflow: visible;
+  }
+
+  .header-top {
+    margin-bottom: 8px;
+  }
+
+  .page-title {
+    font-size: 22px;
+  }
 
   .filter-tabs {
-    overflow-x: auto;
-    padding-bottom: 4px;
-    -webkit-overflow-scrolling: touch;
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+    overflow: visible;
+    padding: 10px 8px 14px;
+    margin: 0 -4px;
     &::-webkit-scrollbar { display: none; }
   }
 
   .filter-btn {
-    flex-shrink: 0;
-    padding: 7px 16px;
+    min-width: 0;
+    padding: 7px 10px;
     font-size: 12px;
+  }
+
+  .history-scroll-area {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    margin: 0 -8px;
+    padding: 16px 16px 28px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .record-list {
+    gap: 14px;
+  }
+
+  .record-card,
+  .loading-skeleton-card {
+    border-radius: 16px;
+    box-shadow: $shadow-sm;
+  }
+
+  .record-card:hover {
+    box-shadow: $shadow-md;
+  }
+
+  .loading-state {
+    padding-top: 34px;
+  }
+
+  .loading-skeleton-list {
+    margin-top: 20px;
+  }
+
+  .empty-state {
+    min-height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 34px 24px;
   }
 
   .place-from, .place-to { max-width: 110px; }

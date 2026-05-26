@@ -55,17 +55,18 @@ const auth = useAuthStore()
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.3), rgba(255, 255, 255, 0)),
-    transparent;
+  background: $page-bg;
 }
 
 .top-nav {
   height: $nav-height;
-  background: rgba($surface-soft, 0.84);
-  backdrop-filter: blur(22px) saturate(1.08);
-  -webkit-backdrop-filter: blur(22px) saturate(1.08);
-  border-bottom: 1px solid rgba($border-light, 0.72);
+  background:
+    radial-gradient(circle at 50% 0%, rgba(255, 255, 255, 0.3), transparent 48%),
+    linear-gradient(180deg, rgba(255, 255, 252, 0.72), rgba(248, 246, 237, 0.54));
+  backdrop-filter: blur(20px) saturate(1.08);
+  -webkit-backdrop-filter: blur(20px) saturate(1.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.44);
+  box-shadow: 0 18px 34px rgba(0, 0, 0, 0.26);
   position: sticky;
   top: 0;
   z-index: 100;
@@ -92,15 +93,18 @@ const auth = useAuthStore()
 .brand-icon {
   width: 38px;
   height: 38px;
-  border-radius: 14px;
+  border-radius: 8px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: $color-ink;
   background:
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent),
-    $color-primary;
-  box-shadow: 0 12px 24px rgba($color-primary, 0.22);
+    radial-gradient(circle at 46% 24%, rgba(255, 255, 255, 1), rgba(255, 255, 255, 0.58) 48%, transparent 70%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 222, 207, 0.88));
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.98) inset,
+    0 -9px 18px rgba(186, 178, 153, 0.14) inset,
+    0 11px 21px rgba(0, 0, 0, 0.24);
 
   :deep(svg) {
     width: 21px;
@@ -140,7 +144,7 @@ const auth = useAuthStore()
     color: $text-secondary;
     min-height: 38px;
     padding: 8px 15px;
-    border-radius: 999px;
+    border-radius: 8px;
     font-weight: 650;
     transition:
       color 0.18s ease,
@@ -149,30 +153,46 @@ const auth = useAuthStore()
       transform 0.18s ease;
 
     &:hover {
-      color: $text-primary;
-      background: rgba($content-bg, 0.72);
-      box-shadow: $shadow-sm;
+      color: $color-ink;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 0.92), transparent 58%),
+        linear-gradient(145deg, rgba(255, 255, 252, 0.96), rgba(229, 225, 212, 0.84));
+      box-shadow:
+        0 1px 1px rgba(255, 255, 255, 0.98) inset,
+        0 10px 18px rgba(0, 0, 0, 0.2);
       transform: translateY(-1px);
     }
 
     &.router-link-active {
-      color: $text-primary;
-      background: $content-bg;
-      box-shadow: $shadow-sm;
+      color: $color-ink;
+      background:
+        radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+        linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 222, 207, 0.9));
+      box-shadow:
+        0 1px 1px rgba(255, 255, 255, 1) inset,
+        0 -8px 16px rgba(186, 178, 153, 0.14) inset,
+        0 10px 20px rgba(0, 0, 0, 0.22);
     }
   }
 }
 
 .login-link {
-  background: $color-primary !important;
-  color: #fff !important;
+  background:
+    radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 222, 207, 0.9)) !important;
+  color: $color-ink !important;
   padding: 8px 20px !important;
   font-weight: 700;
-  box-shadow: 0 10px 22px rgba($color-primary, 0.22);
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 1) inset,
+    0 -8px 16px rgba(186, 178, 153, 0.14) inset,
+    0 10px 20px rgba(0, 0, 0, 0.22);
 
   &:hover {
-    background: $color-primary-light !important;
-    color: #fff !important;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 56%),
+      linear-gradient(145deg, rgba(255, 255, 255, 1), rgba(237, 233, 218, 0.92)) !important;
+    color: $color-ink !important;
   }
 }
 
@@ -184,15 +204,15 @@ const auth = useAuthStore()
   color: $text-secondary;
   min-height: 38px;
   padding: 4px 12px 4px 5px;
-  border-radius: 999px;
+  border-radius: 8px;
   font-size: $font-size-sm;
   font-weight: 650;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 
   &:hover {
     color: $text-primary;
-    background: $content-bg;
-    box-shadow: $shadow-sm;
+    background: rgba(255, 255, 255, 0.08);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.08) inset;
   }
 }
 
@@ -200,8 +220,10 @@ const auth = useAuthStore()
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: $color-ink;
-  color: #fff;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(255, 255, 255, 1), transparent 60%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(224, 219, 204, 0.9));
+  color: $color-ink;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -215,5 +237,44 @@ const auth = useAuthStore()
   width: 100%;
   margin: 0 auto;
   padding: 26px 32px 44px;
+}
+
+// Neumorphic soft UI override
+.top-nav {
+  background: $content-bg;
+  border-bottom: 0;
+  box-shadow:
+    -6px -6px 14px rgba(255, 255, 255, 0.54),
+    6px 6px 14px rgba(163, 177, 198, 0.22);
+}
+
+.brand-icon,
+.nav-links a.router-link-active,
+.login-link,
+.avatar-sm {
+  background: $content-bg !important;
+  color: $text-primary !important;
+  box-shadow: $shadow-sm;
+}
+
+.nav-links a,
+.user-trigger {
+  border-radius: 14px;
+}
+
+.nav-links a:hover,
+.user-trigger:hover {
+  background: $content-bg;
+  color: $text-primary;
+  box-shadow: $shadow-sm;
+}
+
+.nav-links a:active,
+.login-link:active,
+.user-trigger:active {
+  transform: translateY(1px) scale(0.99);
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42);
 }
 </style>

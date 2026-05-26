@@ -61,12 +61,17 @@ function isTabActive(tabPath) {
   align-items: center;
   justify-content: space-around;
   height: $tab-height;
-  background: rgba($content-bg, 0.91);
-  backdrop-filter: blur(22px) saturate(1.08);
-  -webkit-backdrop-filter: blur(22px) saturate(1.08);
-  border: 1px solid rgba($border-light, 0.86);
-  border-radius: 24px;
-  box-shadow: 0 18px 40px rgba($text-primary, 0.13);
+  background:
+    radial-gradient(circle at 50% 10%, rgba(255, 255, 255, 0.96), transparent 58%),
+    linear-gradient(145deg, rgba(255, 255, 252, 0.92), rgba(226, 223, 211, 0.82));
+  backdrop-filter: blur(18px) saturate(1.04);
+  -webkit-backdrop-filter: blur(18px) saturate(1.04);
+  border: 1px solid rgba(255, 255, 255, 0.54);
+  border-radius: 12px;
+  box-shadow:
+    0 1px 1px rgba(255, 255, 255, 0.88) inset,
+    0 -14px 22px rgba(184, 176, 151, 0.12) inset,
+    0 18px 40px rgba(89, 95, 98, 0.2);
   padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0));
 }
 
@@ -75,23 +80,28 @@ function isTabActive(tabPath) {
   flex-direction: column;
   align-items: center;
   gap: 3px;
-  color: $text-secondary;
+  color: #4a5157;
   text-decoration: none;
   padding: 8px 14px;
   position: relative;
   min-width: 68px;
   min-height: 50px;
   justify-content: center;
-  border-radius: 18px;
+  border-radius: 8px;
   transition:
     color 0.18s ease,
     background 0.18s ease,
     transform 0.18s ease;
 
   &.active {
-    color: $color-primary;
+    color: #151719;
     font-weight: 600;
-    background: $color-primary-bg;
+    background:
+      radial-gradient(circle at 50% 18%, rgba(255, 255, 255, 1), transparent 58%),
+      linear-gradient(145deg, rgba(255, 255, 252, 0.98), rgba(226, 223, 211, 0.88));
+    box-shadow:
+      0 1px 1px rgba(255, 255, 255, 0.9) inset,
+      0 8px 14px rgba(89, 95, 98, 0.14);
 
     .tab-icon {
       transform: translateY(-1px);
@@ -114,5 +124,30 @@ function isTabActive(tabPath) {
   font-size: 11px;
   font-weight: 650;
   line-height: 1;
+}
+
+// Neumorphic soft UI override
+.bottom-tabs {
+  background: $content-bg;
+  border: 0;
+  border-radius: 24px;
+  box-shadow: $shadow-lg;
+}
+
+.tab-item {
+  color: $text-secondary;
+  border-radius: 18px;
+}
+
+.tab-item.active {
+  color: $text-primary;
+  background: $content-bg;
+  box-shadow:
+    inset -5px -5px 10px rgba(255, 255, 255, 0.68),
+    inset 5px 5px 10px rgba(163, 177, 198, 0.42);
+}
+
+.tab-item:active {
+  transform: translateY(1px) scale(0.98);
 }
 </style>
