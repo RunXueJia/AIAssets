@@ -217,6 +217,26 @@ def test_generate_stream_returns_documented_sse_events() -> None:
     assert "realtime" in snapshot_types
 
 
+def test_generate_stream_accepts_missing_range() -> None:
+    client = _client()
+
+    response = client.post(
+        "/api/v1/planning/generate_stream",
+        json={
+            "origin": "杭州东站",
+            "destination": "西湖景区",
+            "transport_mode": "mixed",
+        },
+    )
+
+    assert response.status_code == 200
+
+    events = _parse_sse_events(response.text)
+    assert events[0][0] == "record_created"
+    assert events[-1][0] == "done"
+    assert events[-1][1]["status"] == "completed"
+
+
 def test_cancel_generation_returns_unified_response() -> None:
     client = _client()
 

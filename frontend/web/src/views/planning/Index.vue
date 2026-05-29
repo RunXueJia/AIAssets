@@ -41,7 +41,7 @@
                 <el-icon><Location /></el-icon>
               </div>
               <h3 class="step-title">去哪儿？</h3>
-              <p class="step-desc">选择起点、目的地和这次出行的范围。</p>
+              <p class="step-desc">选择起点、目的地和这次出行的要求。</p>
               <div class="step-form">
                 <div class="input-group">
                   <label class="input-label">起点</label>
@@ -66,7 +66,7 @@
                   <span v-if="errors.destination" class="field-error">{{ errors.destination }}</span>
                 </div>
                 <div class="input-group">
-                  <label class="input-label">范围</label>
+                  <label class="input-label">要求</label>
                   <el-input
                     v-model="form.range"
                     placeholder="例如：一天、步行少一点"
@@ -489,8 +489,8 @@ function validateStep(step) {
   if (step === 0) {
     errors.origin = form.origin.trim() ? '' : '请选择起点'
     errors.destination = form.destination.trim() ? '' : '请选择目的地'
-    errors.range = form.range.trim() ? '' : '请输入出行范围'
-    return !errors.origin && !errors.destination && !errors.range
+    errors.range = ''
+    return !errors.origin && !errors.destination
   }
   if (step === 1) return !!form.transport_mode
   return true

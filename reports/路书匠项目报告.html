@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>路书匠项目报告</title>
+  <style>
+    :root {
+      --bg: #f5f5f7;
+      --surface: #ffffff;
+      --text: #1d1d1f;
+      --muted: #6e6e73;
+      --line: #d6d6da;
+      --blue: #0071e3;
+      --green: #188056;   
+      --orange: #c47420;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #e8e8ed;
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", sans-serif;
+      overflow: hidden;
+      letter-spacing: 0;
+    }
+    .deck-wrap {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 52px 88px 72px;
+    }
+    .deck {
+      width: 1920px;
+      height: 1080px;
+      transform-origin: center center;
+      position: relative;
+      background: var(--bg);
+      box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22);
+      overflow: hidden;
+    }
+    .slide {
+      position: absolute;
+      inset: 0;
+      display: none;
+      padding: 86px 112px;
+      background: var(--bg);
+    }
+    .slide.active {
+      display: block;
+      animation: fade 180ms ease-out;
+    }
+    @keyframes fade {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .topline {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      color: var(--muted);
+      font-size: 22px;
+      font-weight: 700;
+    }
+    .topline span { color: var(--blue); }
+    h1 {
+      margin: 44px 0 18px;
+      width: 1180px;
+      font-size: 74px;
+      line-height: 1.08;
+      text-wrap: pretty;
+      letter-spacing: 0;
+    }
+    .subtitle {
+      width: 1180px;
+      margin: 0;
+      color: #424245;
+      font-size: 31px;
+      line-height: 1.48;
+      text-wrap: pretty;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 24px;
+      margin: 96px 0 0;
+      padding: 0;
+      list-style: none;
+      width: 1510px;
+    }
+    .grid li {
+      min-height: 122px;
+      padding: 28px 32px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--surface);
+      color: #2f3337;
+      font-size: 27px;
+      line-height: 1.42;
+      text-wrap: pretty;
+    }
+    .grid li::before {
+      content: "";
+      display: inline-block;
+      width: 11px;
+      height: 11px;
+      margin-right: 14px;
+      border-radius: 50%;
+      background: var(--blue);
+      vertical-align: middle;
+    }
+    footer {
+      position: absolute;
+      left: 112px;
+      right: 112px;
+      bottom: 54px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 18px;
+    }
+    footer span { float: right; font-weight: 700; }
+    .nav {
+      position: fixed;
+      left: 50%;
+      bottom: 18px;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      z-index: 10;
+    }
+    .nav button {
+      min-width: 86px;
+      height: 38px;
+      border: 1px solid #c9c9cf;
+      border-radius: 8px;
+      background: #fff;
+      color: #1d1d1f;
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .nav button:focus-visible {
+      outline: 2px solid var(--blue);
+      outline-offset: 2px;
+    }
+    .counter {
+      min-width: 74px;
+      color: #424245;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  <main class="deck-wrap">
+    <div class="deck" id="deck">
+      
+            <section class="slide" data-screen-label="01 项目封面">
+              <div class="topline"><span>01</span><b>项目封面</b></div>
+              <h1>路书匠项目报告</h1>
+              <p class="subtitle">轻量 AI 出行规划工具：从出行条件输入，到外部数据增强，再到大模型流式生成可执行路线建议。</p>
+              <ul class="grid"><li>AI 规划</li><li>SSE 流式</li><li>高德</li><li>天气</li><li>实时检索</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>01</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="02 项目结论">
+              <div class="topline"><span>02</span><b>项目结论</b></div>
+              <h1>当前阶段结论</h1>
+              <p class="subtitle">首版核心链路已经成形，剩余重点是联调收口和真实 LLM Key 修复。</p>
+              <ul class="grid"><li>3 端：后端 API / 用户端 / 管理后台</li><li>60 个后端 pytest 用例通过</li><li>14 张 MVP 业务表已设计并迁移</li><li>P0/P1 首版接口基本注册完成</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>02</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="03 产品定位">
+              <div class="topline"><span>03</span><b>产品定位</b></div>
+              <h1>MVP 范围与用户价值</h1>
+              <p class="subtitle">输入少量约束，输出可直接参考的行程建议。</p>
+              <ul class="grid"><li>用户输入：起点、目的地、范围、交通方式、日期、人数、偏好、避免项</li><li>系统输出：天气、路线、地图、景点、实时资讯、风险提示、Markdown 与 JSON 摘要</li><li>角色边界：用户/游客与管理员，不做规划师、运营、支付和订单</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>03</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="04 核心流程">
+              <div class="topline"><span>04</span><b>核心流程</b></div>
+              <h1>从输入到结果的生成链路</h1>
+              <p class="subtitle">SSE 让用户持续看到规划过程，数据库保留完整事件和结果。</p>
+              <ul class="grid"><li>提交条件</li><li>创建记录</li><li>聚合数据</li><li>LLM 编排</li><li>阶段输出</li><li>保存结果</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>04</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="05 技术架构">
+              <div class="topline"><span>05</span><b>技术架构</b></div>
+              <h1>三端协作与外部能力接入</h1>
+              <p class="subtitle">FastAPI 作为统一后端，用户端与管理端共享认证和记录能力。</p>
+              <ul class="grid"><li>Web 用户端：Vue 3 / Vite / Pinia / Element Plus</li><li>后端 API：FastAPI / SQLAlchemy 2 / Pydantic v2</li><li>MySQL：用户、记录、快照、日志、配置</li><li>外部服务：高德、天气、Tavily、OpenAI-compatible LLM</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>05</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="06 AI 编排">
+              <div class="topline"><span>06</span><b>AI 编排</b></div>
+              <h1>规划生成的 8 个阶段</h1>
+              <p class="subtitle">阶段化输出让用户可感知进度，也方便后端落库和排障。</p>
+              <ul class="grid"><li>需求理解</li><li>天气预警</li><li>地图 POI</li><li>路线规划</li><li>路径图</li><li>途径景点</li><li>实时信息</li><li>汇总建议</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>06</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="07 用户端">
+              <div class="topline"><span>07</span><b>用户端</b></div>
+              <h1>单页规划工作台</h1>
+              <p class="subtitle">首屏直接进入规划，不做营销页。</p>
+              <ul class="grid"><li>规划输入：步骤式表单和交通方式选择</li><li>流式输出：阶段进度、停止生成、复制结果</li><li>历史与详情：重新生成、失败重试、流式续接</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>07</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="08 管理后台">
+              <div class="topline"><span>08</span><b>管理后台</b></div>
+              <h1>运营与排障工作台</h1>
+              <p class="subtitle">后台聚焦用户、生成记录和 LLM 配置，不引入复杂权限模型。</p>
+              <ul class="grid"><li>用户管理：列表、搜索、状态筛选、启用/禁用</li><li>记录管理：筛选、详情、错误、重试、删除</li><li>LLM 配置：密钥掩码、启用/停用、连接测试</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>08</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="09 数据设计">
+              <div class="topline"><span>09</span><b>数据设计</b></div>
+              <h1>以快照保证历史可复现</h1>
+              <p class="subtitle">用户输入、外部数据、流式事件和最终结果都独立保存。</p>
+              <ul class="grid"><li>账号与会话</li><li>生成记录</li><li>外部快照</li><li>LLM 与审计</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>09</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="10 进度与风险">
+              <div class="topline"><span>10</span><b>进度与风险</b></div>
+              <h1>当前状态与下一步</h1>
+              <p class="subtitle">后端自测已通过，下一阶段应集中在真实联调和质量门禁。</p>
+              <ul class="grid"><li>已完成：工程、认证、SSE、记录、外部集成、AI 编排、首版页面</li><li>风险：LLM Key、前端联调、mypy、截图兜底、审计日志</li><li>下一步：真实端到端联调、质量门禁、演示数据</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>10</span></footer>
+            </section>
+            
+            <section class="slide" data-screen-label="11 交付路线">
+              <div class="topline"><span>11</span><b>交付路线</b></div>
+              <h1>MVP 收口计划</h1>
+              <p class="subtitle">建议用三步完成从可用到可演示的闭环。</p>
+              <ul class="grid"><li>第 1 步：联调可用</li><li>第 2 步：稳定可测</li><li>第 3 步：演示可讲</li></ul>
+              <footer>路书匠 RouteCraft 项目报告 | 2026-05-26 <span>11</span></footer>
+            </section>
+            
+    </div>
+  </main>
+  <div class="nav" aria-label="幻灯片导航">
+    <button id="prev">上一页</button>
+    <span class="counter" id="counter"></span>
+    <button id="next">下一页</button>
+  </div>
+  <script>
+    const slides = [...document.querySelectorAll('.slide')];
+    const deck = document.getElementById('deck');
+    const counter = document.getElementById('counter');
+    let index = Number(localStorage.getItem('routecraft-report-slide') || 0);
+    index = Math.min(Math.max(index, 0), slides.length - 1);
+
+    function fit() {
+      const padX = 176;
+      const padY = 124;
+      const scale = Math.min((innerWidth - padX) / 1920, (innerHeight - padY) / 1080);
+      deck.style.transform = `scale(${Math.max(0.18, scale)})`;
+    }
+    function show(nextIndex) {
+      index = Math.min(Math.max(nextIndex, 0), slides.length - 1);
+      slides.forEach((slide, i) => slide.classList.toggle('active', i === index));
+      counter.textContent = `${index + 1} / ${slides.length}`;
+      localStorage.setItem('routecraft-report-slide', String(index));
+    }
+    document.getElementById('prev').addEventListener('click', () => show(index - 1));
+    document.getElementById('next').addEventListener('click', () => show(index + 1));
+    addEventListener('keydown', (event) => {
+      if (event.key === 'ArrowLeft') show(index - 1);
+      if (event.key === 'ArrowRight' || event.key === ' ') {
+        event.preventDefault();
+        show(index + 1);
+      }
+    });
+    addEventListener('resize', fit);
+    fit();
+    show(index);
+  </script>
+</body>
+</html>

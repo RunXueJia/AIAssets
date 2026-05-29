@@ -21,7 +21,7 @@ StreamEventType = Literal["record_created", "stage", "token", "snapshot", "done"
 class GenerateStreamRequest(BaseModel):
     origin: str = Field(min_length=1, max_length=255)
     destination: str = Field(min_length=1, max_length=255)
-    range: str = Field(min_length=1, max_length=120)
+    range: str = Field(default="", max_length=120)
     transport_mode: TransportMode = "mixed"
     travel_date: date | None = None
     people_count: int | None = Field(default=None, ge=1, le=99)

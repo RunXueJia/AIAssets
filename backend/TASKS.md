@@ -1,5 +1,5 @@
 # 后端任务清单
-
+ python -m uvicorn app.main:app --host 0.0.0.0 --port 3002 --reload
 ## 0. 任务分配与进度看板
 
 更新日期：2026-05-21

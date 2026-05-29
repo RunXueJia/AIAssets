@@ -605,15 +605,15 @@ onBeforeUnmount(() => {
 
 .record-time {
   font-size: $font-size-xs;
-  color: $text-hint;
+  color: $text-primary;
   font-weight: 500;
 }
 
 .record-date {
   font-size: $font-size-xs;
-  color: $border-light;
+  color: $text-primary;
 
-  &::before { content: '·'; margin-right: 6px; color: $border-light; }
+  &::before { content: '·'; margin-right: 6px; color: $text-primary; }
 }
 
 .record-duration {

@@ -291,6 +291,8 @@ VITE_API_BASE_URL=http://localhost:3002
 
 请求：
 
+字段说明：`range` 非必填；省略时按空字符串处理。
+
 ```json
 {
   "origin": "杭州东站",
